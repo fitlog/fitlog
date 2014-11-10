@@ -12,7 +12,8 @@
     <string name="start">Старт</string>
     <string name="delete_item">Удалить</string>
     <string name="delete_record">Удалить запись</string>
-    <string name="relax_time">Отдых(cек)</string>
+    <string name="relax_time">Отдых(c)</string>
     <string name="repeat_num">Повторы</string>
 	<string name="weight">Вес(кг)</string>
+	<string name="date">Дата</string>
 </resources>

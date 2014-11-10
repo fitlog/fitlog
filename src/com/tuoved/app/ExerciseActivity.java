@@ -23,11 +23,14 @@ import android.os.Vibrator;
 import android.support.v4.app.NavUtils;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.text.format.DateFormat;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.View.OnClickListener;
+import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemLongClickListener;
 import android.widget.Button;
@@ -44,14 +47,13 @@ import com.tuoved.app.ProviderMetaData.Labels;
 public class ExerciseActivity extends ListActivity implements OnClickListener, LoaderCallbacks<Cursor>
 {
 //	private final int ID_DELETE = 1;
-	protected static SimpleCursorAdapter mAdapter;
-	Ringtone ringtone;
-	RingtoneManager mRingtonManager = new RingtoneManager(this);
+	protected static MyAdapter mAdapter;
+	private Ringtone mRingtone;
+	private RingtoneManager mRingtonManager = new RingtoneManager(this);
 	protected static final String TAG = "ExerciseActivity";
 	protected static final String SETTINGS_FILE = "settings";
 	protected static final String IS_STARTED = "is_started";
 	protected static final int ID_LOADER = 0;
-	protected static final int ID_LOADER_1 = 1;
 	protected static final long MILLIS_SHORT = 20;
 	protected static long mLabelRowId = 0;
 	protected static String mTitle;
@@ -62,6 +64,7 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 	protected static CountDownTimer timer;
 	protected static LoaderManager mLoaderManager;
 	protected static Vibrator mVibrator;
+	
 	protected EditText edit_relax_time, edit_repeats, edit_weight;
 	protected int relax_time, repeats;
 	protected float weight;
@@ -80,11 +83,10 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 		setupActionBar();
 		getViewFromId();
 		loadSettings();
-		Intent intent = getIntent ();
-		mLabelRowId = intent.getLongExtra( MainActivity.EXTRA_MESSAGE, 0 );
+		setLabel();
 		mRingtonManager.setType(RingtoneManager.TYPE_NOTIFICATION);
 		mRingtonManager.getCursor();
-		ringtone = mRingtonManager.getRingtone(0);
+		mRingtone = mRingtonManager.getRingtone(0);
 		
 		final String[] FROM = {
 				Data.DATE,
@@ -93,14 +95,13 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 				Data.RELAX_TIME
 		};
 		int[] to = { R.id.date, R.id.weight, R.id.repeats, R.id.relax };
-		mAdapter = new SimpleCursorAdapter(this,
+		mAdapter = new MyAdapter(this,
 				R.layout.row_item,
-				null, FROM , to, 0);
+				null, FROM, to, 0);
 		setListAdapter(mAdapter);
 		mVibrator = (Vibrator)getSystemService(VIBRATOR_SERVICE);
 		mLoaderManager = getLoaderManager();
 		mLoaderManager.initLoader(ID_LOADER, null, this);
-		mLoaderManager.initLoader(ID_LOADER_1, null, this);
 		getListView().setOnItemLongClickListener(mItemLongClickListener);
 		btn_start.setOnClickListener ( this );
 		edit_relax_time.addTextChangedListener ( edit_time_watcher );
@@ -168,9 +169,9 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 	
 	//--------------------------------------------------------------------------
 	@Override
-		protected void onListItemClick(ListView l, View v, int position, long id) {
-			super.onListItemClick(l, v, position, id);
-		}
+	protected void onListItemClick(ListView l, View v, int position, long id) {
+		super.onListItemClick(l, v, position, id);
+	}
 	//--------------------------------------------------------------------------
 	private void getViewFromId(){
 		// Initialization layout variables
@@ -179,6 +180,21 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 		edit_repeats = (EditText) findViewById ( R.id.editText_RepeatNum );
 		edit_weight = (EditText) findViewById ( R.id.editText_Weight );
 		text_timer = (TextView) findViewById ( R.id.timerView );
+	}
+	//--------------------------------------------------------------------------
+	private void setLabel(){
+		Intent intent = getIntent ();
+		mLabelRowId = intent.getLongExtra( MainActivity.EXTRA_MESSAGE, 0 );
+		String pathSegment = String.valueOf(mLabelRowId);
+		final Uri uri = Labels.CONTENT_URI.buildUpon().appendPath(pathSegment).build();
+		Cursor c = getContentResolver().query(uri, null, null, null, null);
+		if(c != null) {
+			c.moveToFirst();
+			mTitle = c.getString(c.getColumnIndex(Labels.NAME));
+		}
+		else
+			mTitle = "Unknown";
+		this.setTitle ( mTitle );
 	}
 	
 	//--------------------------------------------------------------------------
@@ -325,7 +341,7 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 					long[] pattern = {0, 400, 400, 400, 400, 800};
 					mVibrator.vibrate(pattern,-1);
 				}
-				ringtone.play();
+				mRingtone.play();
 				Log.d(TAG, "Timer.onFinish");
 			}
 		}.start();
@@ -472,8 +488,7 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 			};
 		}
 		else {
-			String pathSegment = String.valueOf(mLabelRowId);
-			uri = Uri.withAppendedPath(Labels.CONTENT_URI, pathSegment);
+			
 		}
 		return new CursorLoader(getApplicationContext(), uri, projection, null, null, null);
 	}
@@ -481,34 +496,61 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 	// -------------------------------------------------------------------------
 	@Override
 	public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
-		
-		final int id = loader.getId();
-		if( id == ID_LOADER )
 			mAdapter.swapCursor(data);
-		else {
-			data.moveToFirst();
-			mTitle = data.getString(data.getColumnIndex(Labels.NAME));
-			setTitle ( mTitle );
-		}
 	}
 
 	// -------------------------------------------------------------------------
 	@Override
 	public void onLoaderReset(Loader<Cursor> loader) {
-		
-		final int id = loader.getId();
-		if( id == ID_LOADER )
 			mAdapter.swapCursor(null);
 	}
-}
+	
+	// -------------------------------------------------------------------------
+	private class MyAdapter extends SimpleCursorAdapter{
+		private final CharSequence DATE_FORMAT = "dd.MM.yyyy";
+		LayoutInflater mInflater;
 
-class MyAdapter extends SimpleCursorAdapter{
+		public MyAdapter(Context context, int layout, Cursor c, String[] from,
+				int[] to, int flags) {
+			super(context, layout, c, from, to, flags);
+			mInflater = (LayoutInflater)context.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
+		}
 
-	public MyAdapter(Context context, int layout, Cursor c, String[] from,
-			int[] to, int flags) {
-		super(context, layout, c, from, to, flags);
+		@Override
+		public View newView(Context context, Cursor cursor, ViewGroup parent) {
+			View v = mInflater.inflate(R.layout.row_item, parent, false);
+			return v;
+		}
+		
+		@Override
+		public void bindView(View v, Context context, Cursor c) {
+			long ldate = c.getLong(c.getColumnIndexOrThrow(Data.DATE));
+			CharSequence date = DateFormat.format(DATE_FORMAT, ldate);
+			CharSequence weight = c.getString(c.getColumnIndexOrThrow(Data.WEIGHT));
+			CharSequence repeats = c.getString(c.getColumnIndexOrThrow(Data.REPEATS));
+			CharSequence relax = c.getString(c.getColumnIndexOrThrow(Data.REPEATS));
+			
+			TextView tvDate = (TextView)v.findViewById(R.id.date);
+			if( tvDate != null ) {
+				tvDate.setText(date);
+			}
+			
+			TextView tvWeight = (TextView)v.findViewById(R.id.weight);
+			if(tvWeight != null) {
+				tvWeight.setText(weight);
+			}
+			
+			TextView tvRepeats = (TextView)v.findViewById(R.id.repeats);
+			if( tvRepeats != null ) {
+				tvRepeats.setText(repeats);
+			}
+			
+			TextView tvRelax = (TextView)v.findViewById(R.id.relax);
+			if(tvRelax != null) {
+				tvRelax.setText(relax);
+			}
+		}
 	}
-	
-	
-	
 }
+
+
