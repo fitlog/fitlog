@@ -94,7 +94,7 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 				Data.REPEATS,
 				Data.RELAX_TIME
 		};
-		int[] to = { R.id.date, R.id.weight, R.id.repeats, R.id.relax };
+		int[] to = { R.id.time, R.id.weight, R.id.repeats, R.id.relax };
 		mAdapter = new MyAdapter(this,
 				R.layout.row_item,
 				null, FROM, to, 0);
@@ -507,36 +507,69 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 	
 	// -------------------------------------------------------------------------
 	private class MyAdapter extends SimpleCursorAdapter{
-		private final CharSequence DATE_FORMAT = "dd.MM.yyyy";
-		LayoutInflater mInflater;
+		private final CharSequence DATE_FORMAT = "dd.MM.yy";
+		private final CharSequence TIME_FORMAT = "HH:mm";
+		private final long MILLIS_OF_DAY = 60*60*24*1000;
+		private LayoutInflater mInflater;
+		private int mLayout;
+		private int mPos;
 
 		public MyAdapter(Context context, int layout, Cursor c, String[] from,
 				int[] to, int flags) {
 			super(context, layout, c, from, to, flags);
 			mInflater = (LayoutInflater)context.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
+			mLayout = layout;
 		}
 
 		@Override
-		public View newView(Context context, Cursor cursor, ViewGroup parent) {
-			View v = mInflater.inflate(R.layout.row_item, parent, false);
-			return v;
+		public View newView(Context context, Cursor c, ViewGroup parent) {
+			return mInflater.inflate(mLayout, parent, false);
 		}
 		
 		@Override
 		public void bindView(View v, Context context, Cursor c) {
-			long ldate = c.getLong(c.getColumnIndexOrThrow(Data.DATE));
-			CharSequence date = DateFormat.format(DATE_FORMAT, ldate);
-			CharSequence weight = c.getString(c.getColumnIndexOrThrow(Data.WEIGHT));
-			CharSequence repeats = c.getString(c.getColumnIndexOrThrow(Data.REPEATS));
-			CharSequence relax = c.getString(c.getColumnIndexOrThrow(Data.REPEATS));
+			if(c == null)
+				return;
+			int pos = c.getPosition();
+			if(pos == 0)
+				find_max(c);
+			long prev_millis = 0;
+			if((pos - 1) >= 0) {
+				c.moveToPosition(pos - 1);
+				prev_millis = c.getLong(c.getColumnIndexOrThrow(Data.DATE));
+				prev_millis -= prev_millis % MILLIS_OF_DAY;
+			}
+			c.moveToPosition(pos);
+			long cur_millis = c.getLong(c.getColumnIndexOrThrow(Data.DATE));
+			long cur_temp = cur_millis - (cur_millis % MILLIS_OF_DAY);
+			String weight = c.getString(c.getColumnIndexOrThrow(Data.WEIGHT));
+			String repeats = c.getString(c.getColumnIndexOrThrow(Data.REPEATS));
+			String relax = c.getString(c.getColumnIndexOrThrow(Data.RELAX_TIME));
+			CharSequence dt = null;
 			
-			TextView tvDate = (TextView)v.findViewById(R.id.date);
+			TextView tvHeader = (TextView)v.findViewById(R.id.header);
+			if( tvHeader != null ) {
+				if( cur_temp != prev_millis ) {
+					dt = DateFormat.format(DATE_FORMAT, cur_millis);
+					tvHeader.setText(dt);
+					tvHeader.setVisibility(View.VISIBLE);
+				}
+				else
+					tvHeader.setVisibility(View.GONE);
+			}
+			
+			TextView tvDate = (TextView)v.findViewById(R.id.time);
 			if( tvDate != null ) {
-				tvDate.setText(date);
+				dt = DateFormat.format(TIME_FORMAT, cur_millis);
+				tvDate.setText(dt);
 			}
 			
 			TextView tvWeight = (TextView)v.findViewById(R.id.weight);
 			if(tvWeight != null) {
+				if( mPos == c.getPosition())
+					tvWeight.setTextColor(getResources().getColor(R.color.green));
+				else
+					tvWeight.setTextColor(getResources().getColor(android.R.color.darker_gray));
 				tvWeight.setText(weight);
 			}
 			
@@ -548,6 +581,26 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 			TextView tvRelax = (TextView)v.findViewById(R.id.relax);
 			if(tvRelax != null) {
 				tvRelax.setText(relax);
+			}
+		}
+		
+		private void find_max(Cursor c) {
+			float max_w = 0;
+			float max_mult = 0;
+			if( c == null )
+				return;
+			c.getCount();
+			for(int i = 0; i < c.getCount(); i++ ){
+				c.moveToPosition(i);
+				float w = (float)c.getFloat(c.getColumnIndexOrThrow(Data.WEIGHT));
+				if(max_w <= w) {
+					max_w = w;
+					float r = (float)c.getFloat(c.getColumnIndexOrThrow(Data.REPEATS));
+					if( max_mult < max_w * r ){
+						max_mult = max_w * r;
+						mPos = i;
+					}	
+				}
 			}
 		}
 	}
