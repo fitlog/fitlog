@@ -231,7 +231,7 @@ public class ExerciseProvider extends ContentProvider
 			qb.appendWhere( Labels._ID + "=" + uri.getPathSegments().get(1));
 			break;
 		case LABELS_ID_DATA:
-			qb.setTables( ProviderMetaData.LABELS_JOIN_DATA );
+			qb.setTables( ProviderMetaData.DATA_JOIN_LABELS );
 			qb.appendWhere( Labels.TABLE_NAME + "." + Labels._ID + "=" + uri.getPathSegments().get(1));
 			orderBy = (TextUtils.isEmpty ( sortOrder )) ?
 					Data.DEFAULT_SORT_ORDER : sortOrder;

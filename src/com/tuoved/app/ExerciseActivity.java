@@ -471,25 +471,20 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 		
 		Uri uri = null;
 		String[] projection = null;
-		if( id == ID_LOADER){
-			uri = Labels.CONTENT_URI.buildUpon()
-					.appendPath(String.valueOf(mLabelRowId))
-					.appendPath(Data.TABLE_NAME)
-					.build();
-			projection = new String[] {
-					Labels.TABLE_NAME + "." + Labels._ID,
-					Labels.NAME,
-					Data.TABLE_NAME + "." + Data._ID,
-					Data.DATE,
-					Data.WEIGHT,
-					Data.REPEATS,
-					Data.RELAX_TIME,
-					Data.LABEL_ID
-			};
-		}
-		else {
-			
-		}
+		uri = Labels.CONTENT_URI.buildUpon()
+				.appendPath(String.valueOf(mLabelRowId))
+				.appendPath(Data.TABLE_NAME)
+				.build();
+		projection = new String[] {
+				Labels.TABLE_NAME + "." + Labels._ID,
+				Labels.NAME,
+				Data.TABLE_NAME + "." + Data._ID,
+				Data.DATE,
+				Data.WEIGHT,
+				Data.REPEATS,
+				Data.RELAX_TIME,
+				Data.LABEL_ID
+		};
 		return new CursorLoader(getApplicationContext(), uri, projection, null, null, null);
 	}
 	
