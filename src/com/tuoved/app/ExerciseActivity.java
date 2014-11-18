@@ -19,6 +19,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.CountDownTimer;
+import android.os.PowerManager;
 import android.os.Vibrator;
 import android.support.v4.app.NavUtils;
 import android.text.Editable;
@@ -47,14 +48,19 @@ import com.tuoved.app.ProviderMetaData.Labels;
 public class ExerciseActivity extends ListActivity implements OnClickListener, LoaderCallbacks<Cursor>
 {
 //	private final int ID_DELETE = 1;
-	protected static MyAdapter mAdapter;
-	private Ringtone mRingtone;
-	private RingtoneManager mRingtonManager = new RingtoneManager(this);
 	protected static final String TAG = "ExerciseActivity";
+	
+	protected static MyAdapter mAdapter;
+	private static Ringtone mRingtone;
+	private static RingtoneManager mRingtonManager;
+	private static Vibrator mVibrator;
+	private static PowerManager mPowerManager;
+	private static PowerManager.WakeLock mWakeLock;
+	
 	protected static final String SETTINGS_FILE = "settings";
 	protected static final String IS_STARTED = "is_started";
 	protected static final int ID_LOADER = 0;
-	protected static final long MILLIS_SHORT = 20;
+	protected static final long VIBR_MILLIS_SHORT = 20;
 	protected static long mLabelRowId = 0;
 	protected static String mTitle;
 	protected static Button btn_start;
@@ -63,7 +69,8 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 	protected static boolean is_started = false;
 	protected static CountDownTimer timer;
 	protected static LoaderManager mLoaderManager;
-	protected static Vibrator mVibrator;
+
+	private Cursor mCursor;
 	
 	protected EditText edit_relax_time, edit_repeats, edit_weight;
 	protected int relax_time, repeats;
@@ -84,6 +91,9 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 		getViewFromId();
 		loadSettings();
 		setLabel();
+		mPowerManager = (PowerManager)getSystemService(POWER_SERVICE);
+		mWakeLock = mPowerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, TAG);
+		mRingtonManager = new RingtoneManager(this);
 		mRingtonManager.setType(RingtoneManager.TYPE_NOTIFICATION);
 		mRingtonManager.getCursor();
 		mRingtone = mRingtonManager.getRingtone(0);
@@ -117,32 +127,37 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 	
 	@Override
 		protected void onResume() {
-		Log.d(TAG, "onResume: " + this.hashCode());
+		Log.d(TAG, "onResume");
 		super.onResume();
 		}
 	@Override
 		protected void onStart() {
-		Log.d(TAG, "onStart: " + this.hashCode());
+		Log.d(TAG, "onStart");
 		super.onStart();
 		}
 	@Override
 		protected void onPause() {
-		Log.d(TAG, "onPause: " + this.hashCode());
+		Log.d(TAG, "onPause");
 		super.onPause();
 		}
 	@Override
 		protected void onStop() {
-		Log.d(TAG, "onStop: " + this.hashCode());
+		Log.d(TAG, "onStop");
+		mCursor.close();
 		super.onStop();
 		}
 	@Override
 		protected void onRestart() {
-		Log.d(TAG, "onRestart: " + this.hashCode());
+		Log.d(TAG, "onRestart");
 		super.onRestart();
 		}
 	@Override
 		protected void onDestroy() {
-		Log.d(TAG, "onDestroy: " + this.hashCode());
+		Log.d(TAG, "onDestroy");
+		if(timer!=null)
+			timer.cancel();
+		if(mWakeLock.isHeld())
+			mWakeLock.release();
 		super.onDestroy();
 		}
 	
@@ -160,7 +175,7 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 		public boolean onItemLongClick(AdapterView<?> parent, View view,
 				int position, long id) {
 			mSelectedRowId = (int)id;
-			mVibrator.vibrate(MILLIS_SHORT);
+			mVibrator.vibrate(VIBR_MILLIS_SHORT);
 			Toast.makeText(ExerciseActivity.this, "Selected row: " + position,
 					Toast.LENGTH_SHORT).show();
 			return false;
@@ -187,10 +202,10 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 		mLabelRowId = intent.getLongExtra( MainActivity.EXTRA_MESSAGE, 0 );
 		String pathSegment = String.valueOf(mLabelRowId);
 		final Uri uri = Labels.CONTENT_URI.buildUpon().appendPath(pathSegment).build();
-		Cursor c = getContentResolver().query(uri, null, null, null, null);
-		if(c != null) {
-			c.moveToFirst();
-			mTitle = c.getString(c.getColumnIndex(Labels.NAME));
+		mCursor = getContentResolver().query(uri, null, null, null, null);
+		if(mCursor != null) {
+			mCursor.moveToFirst();
+			mTitle = mCursor.getString(mCursor.getColumnIndex(Labels.NAME));
 		}
 		else
 			mTitle = "Unknown";
@@ -225,14 +240,15 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 		{
 			try	{
 				weight = Float.parseFloat ( s.toString () );
+			}
+			catch (NumberFormatException e)	{
+				weight = 0;
+			} finally {
 				SharedPreferences settings = getSharedPreferences (
-					SETTINGS_FILE, MODE_PRIVATE );
+						SETTINGS_FILE, MODE_PRIVATE );
 				SharedPreferences.Editor setEditor = settings.edit ();
 				setEditor.putFloat ( "Weight", weight );
 				setEditor.apply ();
-			}
-			catch (NumberFormatException e)	{
-				weight = 15;
 			}
 		}
 		@Override
@@ -249,22 +265,23 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 		@TargetApi(Build.VERSION_CODES.GINGERBREAD)
 		@Override
 		public void onTextChanged(CharSequence s, int start, int before,
-			int count) {
+				int count) {
 			if (s.toString ().isEmpty ()
-				|| Integer.parseInt ( s.toString () ) == 0)
+					|| Integer.parseInt ( s.toString () ) == 0)
 				btn_start.setEnabled ( false );
 			else
 				btn_start.setEnabled ( true );
 			try	{
 				relax_time = Integer.parseInt ( s.toString () );
-				SharedPreferences settings = getSharedPreferences (
-					SETTINGS_FILE, MODE_PRIVATE );
-				SharedPreferences.Editor setEditor = settings.edit ();
-				setEditor.putInt ( "RelaxTime", relax_time );
-				setEditor.apply ();
 			}
 			catch (NumberFormatException e)	{
 				relax_time = 60;
+			} finally {
+				SharedPreferences settings = getSharedPreferences (
+						SETTINGS_FILE, MODE_PRIVATE );
+				SharedPreferences.Editor setEditor = settings.edit ();
+				setEditor.putInt ( "RelaxTime", relax_time );
+				setEditor.apply ();
 			}
 		}
 
@@ -278,21 +295,21 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 	// -------------------------------------------------------------------------
 	private TextWatcher editRepeatNumWatcher = new TextWatcher ()
 	{
-
 		@TargetApi(Build.VERSION_CODES.GINGERBREAD)
 		@Override
 		public void onTextChanged(CharSequence s, int start, int before,
 			int count) {
 			try	{
 				repeats = Integer.parseInt ( s.toString () );
-				SharedPreferences settings = getSharedPreferences (
-					SETTINGS_FILE, MODE_PRIVATE );
-				SharedPreferences.Editor setEditor = settings.edit ();
-				setEditor.putInt ( "RepeatNum", repeats );
-				setEditor.apply ();
 			}
 			catch (NumberFormatException e)	{
 				repeats = 3;
+			} finally {
+				SharedPreferences settings = getSharedPreferences (
+						SETTINGS_FILE, MODE_PRIVATE );
+				SharedPreferences.Editor setEditor = settings.edit ();
+				setEditor.putInt ( "RepeatNum", repeats );
+				setEditor.apply ();
 			}
 		}
 
@@ -309,8 +326,8 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 		final int procOfTime = (int)(0.1 * (double)relax_time);
 		final int redColor = getResources().getColor(R.color.red );
 		final int greenColor = getResources().getColor(R.color.green);
-		
-		timer = new CountDownTimer ( 1000 * ( relax_time ), 100 ) {
+		mWakeLock.acquire();
+		timer = new CountDownTimer ( 1000 * ( relax_time ), 500 ) {
 			StringBuilder builder = new StringBuilder();
 
 			@Override			
@@ -330,12 +347,11 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 					builder.append(0);
 				builder.append(seconds);
 				text_timer.setText (builder.toString());
-				Log.d(TAG, "Timer.onTick:" + sec);
+//				Log.d(TAG, "Timer.onTick:" + sec);
 			}
 			@Override
 			public void onFinish() {
 				onClick ( btn_start );
-				text_timer.setText ("");
 				addExercise(ExerciseActivity.this);
 				if(mVibrator.hasVibrator())	{
 					long[] pattern = {0, 400, 400, 400, 400, 800};
@@ -343,6 +359,8 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 				}
 				mRingtone.play();
 				Log.d(TAG, "Timer.onFinish");
+				if(mWakeLock.isHeld())
+					mWakeLock.release();
 			}
 		}.start();
 	};
@@ -356,7 +374,7 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 		case R.id.button_Start:
 			if( !is_started ) {
 				is_started = true;
-				mVibrator.vibrate(MILLIS_SHORT);
+				mVibrator.vibrate(VIBR_MILLIS_SHORT);
 				btn_start.setText ("Стоп");
 				text_timer.setText ("");
 				edit_relax_time.clearFocus();
@@ -502,7 +520,7 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 	
 	// -------------------------------------------------------------------------
 	private class MyAdapter extends SimpleCursorAdapter{
-		private final CharSequence DATE_FORMAT = "dd.MM.yy";
+		private final CharSequence DATE_FORMAT = "dd-MM-yy";
 		private final CharSequence TIME_FORMAT = "HH:mm";
 		private final long MILLIS_OF_DAY = 60*60*24*1000;
 		private LayoutInflater mInflater;
