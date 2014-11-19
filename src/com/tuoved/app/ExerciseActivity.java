@@ -50,7 +50,8 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 //	private final int ID_DELETE = 1;
 	protected static final String TAG = "ExerciseActivity";
 	
-	protected static MyAdapter mAdapter;
+	private static MyAdapter mAdapter;
+	private static LoaderManager mLoaderManager;
 	private static Ringtone mRingtone;
 	private static RingtoneManager mRingtonManager;
 	private static Vibrator mVibrator;
@@ -68,7 +69,7 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 	protected static TextView text_timer;
 	protected static boolean is_started = false;
 	protected static CountDownTimer timer;
-	protected static LoaderManager mLoaderManager;
+
 
 	private Cursor mCursor;
 	
@@ -357,7 +358,13 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 					long[] pattern = {0, 400, 400, 400, 400, 800};
 					mVibrator.vibrate(pattern,-1);
 				}
-				mRingtone.play();
+				try {
+					if(mRingtone != null)
+						mRingtone.play();
+				}
+				catch( NullPointerException e ){
+					Log.e(TAG, "Ringtone is null", e);
+				}
 				Log.d(TAG, "Timer.onFinish");
 				if(mWakeLock.isHeld())
 					mWakeLock.release();
