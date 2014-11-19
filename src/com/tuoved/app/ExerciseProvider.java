@@ -59,6 +59,10 @@ public class ExerciseProvider extends ContentProvider
 		sUriMatcher.addURI(ProviderMetaData.AUTHORITY, "data", DATA);
 		sUriMatcher.addURI(ProviderMetaData.AUTHORITY, "data/#", DATA_ID);
 	}
+	
+	private interface Triggers {
+		String EXERCISE_DELETE = "exercise_delete";
+	}
 
 	// Настройка и создание базы данных
 	// --------------------------------------------------------------------------
@@ -83,6 +87,11 @@ public class ExerciseProvider extends ContentProvider
 			+ Data.RELAX_TIME + " INTEGER,"
 			+ Data.DATE + " LONG,"
 			+ Data.LABEL_ID + " INTEGER NOT NULL " + REFERENCES_LABELS_ID + ");";
+		
+		private static final String CREATE_TRIGGER_DELETE_EXERCISES = "CREATE TRIGGER "
+				+ Triggers.EXERCISE_DELETE + " AFTER DELETE ON " + Labels.TABLE_NAME
+				+ " BEGIN DELETE FROM " + Data.TABLE_NAME + " WHERE " + " "
+				+ Data.LABEL_ID + "=old." + Labels._ID + ";" + "END;";
 
 		DataBaseHelper(Context context)
 		{
@@ -97,19 +106,33 @@ public class ExerciseProvider extends ContentProvider
 			Log.d ( TAG, "inner onCreate called" );
 			db.execSQL(CREATE_LABELS_TABLE);
 			db.execSQL(CREATE_DATA_TABLE);
+			db.execSQL(CREATE_TRIGGER_DELETE_EXERCISES);
 		}
 
 		// ------------------------------------------------------------------------
 		@Override
-		public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion)
-		{
+		public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
 			Log.d ( TAG, "inner onUpgrade called" );
-			Log.w ( TAG, "Перевод базы данных с версии " + oldVersion + " на "
-				+ newVersion + " - все старые данные будут уничтожены" );
-			db.execSQL( "DROP TABLE IF EXISTS " + Labels.TABLE_NAME );
-			db.execSQL ( "DROP TABLE IF EXISTS " + Data.TABLE_NAME );
-			onCreate ( db );
+			int version = oldVersion;
+			switch( version ) {
+			case ProviderMetaData.VER_LAUNCH:
+				// Version 2 added trigger for deleting from table Data, 
+				// which called deleting one or more items from table Labels
+				db.execSQL(CREATE_TRIGGER_DELETE_EXERCISES);
+				version = ProviderMetaData.VER_ADD_TRIGGER;
+			}
+			Log.d(TAG, "after upgrade logic, at version " + version);
+			
+			if( version != ProviderMetaData.DATABASE_VERSION ) {
+				db.execSQL( "DROP TABLE IF EXISTS " + Labels.TABLE_NAME );
+				db.execSQL ( "DROP TABLE IF EXISTS " + Data.TABLE_NAME );
+				
+				db.execSQL ( "DROP TRIGGER IF EXISTS " + Triggers.EXERCISE_DELETE );
+
+				onCreate ( db );
+			}
 		}
+		
 	}
 
 	private DataBaseHelper mOpenHelper;

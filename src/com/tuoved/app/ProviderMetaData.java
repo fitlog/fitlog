@@ -11,7 +11,9 @@ public class ProviderMetaData
 	public static final String AUTHORITY = "com.tuoved.app.provider.ExerciseProvider";
 	public static final Uri BASE_CONTENT_URI =  Uri.parse ( "content://" + AUTHORITY );
 	public static final String DATABASE_NAME = "exercise.db";
-	public static final int DATABASE_VERSION = 1;
+	public static final int VER_LAUNCH = 1;
+	public static final int VER_ADD_TRIGGER = 2;
+	public static final int DATABASE_VERSION = VER_ADD_TRIGGER;
 	public static final String DATA_JOIN_LABELS = 
 			Data.TABLE_NAME + " LEFT OUTER JOIN " 
 			+ Labels.TABLE_NAME + " ON("
