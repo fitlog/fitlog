@@ -91,33 +91,17 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 		setupActionBar();
 		getViewFromId();
 		loadSettings();
-		setLabel();
+		setLabel(getIntent());
+		fillData();
+		registerListeners();
 		mPowerManager = (PowerManager)getSystemService(POWER_SERVICE);
 		mWakeLock = mPowerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, TAG);
 		mRingtonManager = new RingtoneManager(this);
 		mRingtonManager.setType(RingtoneManager.TYPE_NOTIFICATION);
 		mRingtonManager.getCursor();
 		mRingtone = mRingtonManager.getRingtone(0);
-		
-		final String[] FROM = {
-				Data.DATE,
-				Data.WEIGHT,
-				Data.REPEATS,
-				Data.RELAX_TIME
-		};
-		int[] to = { R.id.time, R.id.weight, R.id.repeats, R.id.relax };
-		mAdapter = new MyAdapter(this,
-				R.layout.row_item,
-				null, FROM, to, 0);
-		setListAdapter(mAdapter);
 		mVibrator = (Vibrator)getSystemService(VIBRATOR_SERVICE);
-		mLoaderManager = getLoaderManager();
-		mLoaderManager.initLoader(ID_LOADER, null, this);
-		getListView().setOnItemLongClickListener(mItemLongClickListener);
-		btn_start.setOnClickListener ( this );
-		edit_relax_time.addTextChangedListener ( edit_time_watcher );
-		edit_repeats.addTextChangedListener ( editRepeatNumWatcher );
-		edit_weight.addTextChangedListener ( edit_weight_watcher );
+		
 		
 		if(savedInstanceState != null) {
 			is_started = savedInstanceState.getBoolean(IS_STARTED);
@@ -198,8 +182,11 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 		text_timer = (TextView) findViewById ( R.id.timerView );
 	}
 	//--------------------------------------------------------------------------
-	private void setLabel(){
-		Intent intent = getIntent ();
+	private void setLabel(Intent intent){
+		if( intent == null ) {
+			this.setTitle ( mTitle );
+			return;
+		}
 		mLabelRowId = intent.getLongExtra( MainActivity.EXTRA_MESSAGE, 0 );
 		String pathSegment = String.valueOf(mLabelRowId);
 		final Uri uri = Labels.CONTENT_URI.buildUpon().appendPath(pathSegment).build();
@@ -229,6 +216,31 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 			weight = settings.getFloat ( "Weight", 15 );
 			edit_weight.setText ( Float.toString ( weight ) );
 		}
+	}
+	
+	//--------------------------------------------------------------------------
+	private void fillData() {
+		mLoaderManager = getLoaderManager();
+		mLoaderManager.initLoader(ID_LOADER, null, this);
+		final String[] FROM = {
+				Data.DATE,
+				Data.WEIGHT,
+				Data.REPEATS,
+				Data.RELAX_TIME
+		};
+		int[] to = { R.id.time, R.id.weight, R.id.repeats, R.id.relax };
+		mAdapter = new MyAdapter(this,
+				R.layout.row_item,
+				null, FROM, to, 0);
+		setListAdapter(mAdapter);
+	}
+	
+	private void registerListeners() {
+		getListView().setOnItemLongClickListener(mItemLongClickListener);
+		btn_start.setOnClickListener ( this );
+		edit_relax_time.addTextChangedListener ( edit_time_watcher );
+		edit_repeats.addTextChangedListener ( editRepeatNumWatcher );
+		edit_weight.addTextChangedListener ( edit_weight_watcher );
 	}
 
 	// -------------------------------------------------------------------------
@@ -407,9 +419,7 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 	 * Set up the {@link android.app.ActionBar}, if the API is available.
 	 */
 	@TargetApi(Build.VERSION_CODES.HONEYCOMB)
-	private void setupActionBar()
-	{
-		
+	private void setupActionBar() {
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB)	{
 			getActionBar ().setDisplayHomeAsUpEnabled ( true );
 		}
@@ -426,10 +436,8 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 
 	// -------------------------------------------------------------------------
 	@Override
-	public boolean onOptionsItemSelected(MenuItem item)
-	{
-		switch (item.getItemId ())
-		{
+	public boolean onOptionsItemSelected(MenuItem item)	{
+		switch (item.getItemId ()) {
 		case R.id.delete_record:
 			removeExercise( ExerciseActivity.this );
 			break;
@@ -448,6 +456,7 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 		return super.onOptionsItemSelected ( item );
 	}
 	
+	// -------------------------------------------------------------------------
 	@Override
 	public boolean onPrepareOptionsMenu(Menu menu) {
 		MenuItem item = menu.findItem(R.id.delete_record);
@@ -475,8 +484,7 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 	}
 	
 	// -------------------------------------------------------------------------
-	public void removeExercise( Context context )
-	{
+	public void removeExercise( Context context ) {
 		if( mSelectedRowId == 0)
 			return;
 		ContentResolver cr = context.getContentResolver ();
@@ -526,7 +534,7 @@ public class ExerciseActivity extends ListActivity implements OnClickListener, L
 	}
 	
 	// -------------------------------------------------------------------------
-	private class MyAdapter extends SimpleCursorAdapter{
+	private class MyAdapter extends SimpleCursorAdapter {
 		private final CharSequence DATE_FORMAT = "dd-MM-yy";
 		private final CharSequence TIME_FORMAT = "HH:mm";
 		private final long MILLIS_OF_DAY = 60*60*24*1000;
