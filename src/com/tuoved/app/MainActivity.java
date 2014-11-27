@@ -1,48 +1,45 @@
 package com.tuoved.app;
 
-import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.app.Dialog;
-import android.app.ListActivity;
-import android.app.LoaderManager.LoaderCallbacks;
 import android.content.ContentValues;
-import android.content.CursorLoader;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.Loader;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
+import android.support.v4.app.DialogFragment;
+import android.support.v4.app.FragmentActivity;
+import android.support.v4.app.FragmentManager;
+import android.support.v4.app.ListFragment;
+import android.support.v4.app.LoaderManager.LoaderCallbacks;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.View.OnClickListener;
+import android.view.ViewGroup;
 import android.widget.AdapterView;
-import android.widget.AdapterView.OnItemLongClickListener;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ListView;
-import android.widget.SimpleCursorAdapter;
 import android.widget.Toast;
 
 import com.tuoved.app.ProviderMetaData.Labels;
 
-@SuppressLint("NewApi")
-public class MainActivity extends ListActivity implements LoaderCallbacks<Cursor>, OnClickListener {
+public class MainActivity extends FragmentActivity  implements OnClickListener {
 	private static final String TAG = "MainActivity";
+	private static int mSelectedRowId = 0;
 	
 	public final static String EXTRA_MESSAGE = "com.tuoved.app.MESSAGE";
-	SimpleCursorAdapter mAdapter;
-	protected int mSelectedRowId = 0;
-	protected static final int ID_LOADER = 0;
-	private final int IDD_EXIT = 0;
 	private EditText editText;
 	private Button button_add;
 
-	// --------------------------------------------------------------------------------------------
+	// -------------------------------------------------------------------------
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate ( savedInstanceState );
@@ -52,91 +49,34 @@ public class MainActivity extends ListActivity implements LoaderCallbacks<Cursor
 		button_add = (Button) findViewById ( R.id.buttonSend );
 		button_add.setEnabled ( false );
 		editText.addTextChangedListener ( editTextWatcher );
-		
-		final String[] FROM = {Labels.NAME};
-		final int[] TO = {android.R.id.text1};
-		mAdapter = 	new SimpleCursorAdapter(this,
-				android.R.layout.simple_list_item_1,
-				null, FROM, TO , 0);
-		getLoaderManager().initLoader(ID_LOADER, null, this);
-		setListAdapter(mAdapter);
-		getListView().setOnItemLongClickListener(mItemLongClickListener);
 		editText.clearFocus();
+		FragmentManager fragmentManager = getSupportFragmentManager();
+		fragmentManager
+			.beginTransaction()
+			.replace(R.id.labels_container, LabelsFragment.newInstance())
+			.commit();
 	}
 
 	// -------------------------------------------------------------------------
-	@SuppressWarnings("deprecation")
 	@Override
 	public void onBackPressed() {
-		showDialog ( IDD_EXIT );
+		showExitDialog();
 	}
 	
-	// -------------------------------------------------------------------------	
-	@Override
-	protected void onListItemClick(ListView l, View v, int position, long id) {
-		super.onListItemClick(l, v, position, id);
-		Intent intent = new Intent ( MainActivity.this,
-				ExerciseActivity.class );
-		intent.putExtra ( EXTRA_MESSAGE, id );
-		if( id > 0 )
-			startActivity ( intent );
-	}
 	// -------------------------------------------------------------------------
-	private OnItemLongClickListener mItemLongClickListener = 
-			new OnItemLongClickListener() {
-		@Override
-		public boolean onItemLongClick(AdapterView<?> parent, View view,
-				int position, long id) {
-			mSelectedRowId = (int)id;
-			Toast.makeText(MainActivity.this, "Selected row: " + position, Toast.LENGTH_SHORT)
-			.show();
-			return true;
-		}
-	};
-
-
-	// -------------------------------------------------------------------------
-	protected Dialog onCreateDialog(int id)
-	{
-		switch (id) {
-		case IDD_EXIT: {
-			AlertDialog.Builder builder = new AlertDialog.Builder ( this );
-			builder.setMessage ( "Выйти из приложения?" );
-			builder.setPositiveButton ( "Да",
-				new DialogInterface.OnClickListener () {
-					@Override
-					public void onClick(DialogInterface dialog, int which) {
-						// TODO Auto-generated method stub
-						MainActivity.this.finish ();
-					}
-				} );
-			builder.setNegativeButton ( "Нет",
-				new DialogInterface.OnClickListener () {
-					@Override
-					public void onClick(DialogInterface dialog, int which) {
-						dialog.cancel ();
-					}
-				} );
-			builder.setCancelable ( false );
-			return builder.create ();
-		}
-		default:
-			return null;
-		}
-	}
-
 	@Override
 	public boolean onCreateOptionsMenu(Menu menu)
 	{
 		// Inflate the menu; this adds items to the action bar if it is present.
 		getMenuInflater ().inflate ( R.menu.main, menu );
-		return true;
+		return super.onCreateOptionsMenu(menu);
 	}
-
+	
+	// -------------------------------------------------------------------------
 	@Override
 	public boolean onPrepareOptionsMenu(Menu menu) {
 		MenuItem item = menu.findItem(R.id.deleteitem);
-		if(mSelectedRowId == 0 )
+		if(mSelectedRowId == 0)
 			item.setEnabled(false);
 		else
 			item.setEnabled(true);
@@ -157,20 +97,12 @@ public class MainActivity extends ListActivity implements LoaderCallbacks<Cursor
 		}
 		return super.onOptionsItemSelected ( item );
 	}
+
 	// -------------------------------------------------------------------------
-	private void addLabel(String label){
-		ContentValues cv = new ContentValues();
-		cv.put(Labels.NAME, label);
-		Uri uri = Labels.CONTENT_URI;
-		Uri insUri = getContentResolver().insert(uri, cv);
-		Log.d(TAG,"Inserted Uri: " + insUri);
-	}
-	// -------------------------------------------------------------------------
-	private void deleteLabel(){
-		Uri uri = Labels.CONTENT_URI.buildUpon()
-				.appendPath(String.valueOf(mSelectedRowId)).build();
-		getContentResolver().delete(uri, null, null);
-		mSelectedRowId = 0;
+	private void showExitDialog()
+	{
+		ExitDialog dialog = new ExitDialog();
+		dialog.show(getSupportFragmentManager(), "exit_dialog");
 	}
 
 	// -------------------------------------------------------------------------
@@ -191,34 +123,158 @@ public class MainActivity extends ListActivity implements LoaderCallbacks<Cursor
 		public void beforeTextChanged(CharSequence s, int start, int count,
 			int after) { }
 	};
-	// -------------------------------------------------------------------------
-	@Override
-	public Loader<Cursor> onCreateLoader(int id, Bundle args) {
-		Uri uri = Labels.CONTENT_URI;
-		String[] projection = { 
-				Labels._ID, 
-				Labels.NAME
-				};
-		return new CursorLoader(getApplicationContext(), uri, projection, null, null, null);
-	}
-	// -------------------------------------------------------------------------
-	@Override
-	public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
-		mAdapter.swapCursor(data);
-	}
-	// -------------------------------------------------------------------------
-	@Override
-	public void onLoaderReset(Loader<Cursor> loader) {
-		mAdapter.swapCursor(null);		
-	}
+
 	// -------------------------------------------------------------------------
 	@Override
 	public void onClick(View v) {
 		if( v.getId() == R.id.buttonSend ){
 			String label = (String)editText.getText().toString();
-			addLabel(label);
-			editText.setText("");
+			addLabel(this, label);
+			editText.setText(null);
 			editText.clearFocus();
+		}
+	}
+	
+	// -------------------------------------------------------------------------
+	private void addLabel(Context context, String label){
+		ContentValues cv = new ContentValues();
+		cv.put(Labels.NAME, label);
+		Uri uri = Labels.CONTENT_URI;
+		Uri insUri = getContentResolver().insert(uri, cv);
+		Log.d(TAG,"Inserted Uri: " + insUri);
+	}
+	// -------------------------------------------------------------------------
+	public void deleteLabel(){
+		Uri uri = Labels.CONTENT_URI.buildUpon()
+				.appendPath(String.valueOf(mSelectedRowId)).build();
+		getContentResolver().delete(uri, null, null);
+		Log.d(TAG,"Deleted Uri: " + uri);
+		mSelectedRowId = 0;
+	}
+	
+	// -------------------------------------------------------------------------
+	// LabelsFragment
+	// -------------------------------------------------------------------------
+	public static class LabelsFragment extends ListFragment implements LoaderCallbacks<Cursor> {
+		android.support.v4.widget.SimpleCursorAdapter mAdapter;
+		protected static final int ID_LOADER = 0;
+		private View rootView;
+		
+		public static LabelsFragment newInstance(){
+			return new LabelsFragment();
+		}
+
+		public LabelsFragment(){
+		};
+		
+		// -------------------------------------------------------------------------
+		@Override
+		public void onCreate(Bundle savedInstanceState) {
+			super.onCreate(savedInstanceState);
+			getLoaderManager().initLoader(ID_LOADER, null, this);
+		}
+		
+		// -------------------------------------------------------------------------
+		@Override
+		public View onCreateView(LayoutInflater inflater, ViewGroup container,
+				Bundle savedInstanceState) {
+			rootView = inflater.inflate(R.layout.labels_fragment, container, false);
+			return rootView;
+		}
+		
+		// -------------------------------------------------------------------------
+		@Override
+		public void onDestroyView() {
+			// TODO Auto-generated method stub
+			super.onDestroyView();
+			rootView = null;
+		}
+		
+		// -------------------------------------------------------------------------
+		@Override
+		public void onActivityCreated(Bundle savedInstanceState) {
+			super.onActivityCreated(savedInstanceState);
+			final String[] FROM = {Labels.NAME};
+			final int[] TO = {android.R.id.text1};
+			mAdapter = 	new android.support.v4.widget.SimpleCursorAdapter(getActivity(),
+					android.R.layout.simple_list_item_1,
+					null, FROM, TO , 0);
+			setListAdapter(mAdapter);
+			ListView lw = getListView();
+			
+			lw.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+
+				@Override
+				public void onItemClick(AdapterView<?> parent, View view,
+						int position, long id) {
+					Intent intent = new Intent ( getActivity(), ExerciseActivity.class );
+					intent.putExtra ( EXTRA_MESSAGE, id );
+					if( id > 0 )
+						getActivity().startActivity ( intent );
+				}
+			});
+			
+			lw.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
+				@Override
+				public boolean onItemLongClick(AdapterView<?> parent,
+						View view, int position, long id) {
+					mSelectedRowId = (int)id;
+					Toast.makeText(getActivity(), "Selected row: " + position, Toast.LENGTH_SHORT)
+						.show();
+					return true;
+				}
+			});
+			
+		}
+		
+		// -------------------------------------------------------------------------
+		@Override
+		public android.support.v4.content.Loader<Cursor> onCreateLoader(
+				int loader, Bundle arg1) {
+			Uri uri = Labels.CONTENT_URI;
+			String[] projection = { 
+					Labels._ID, 
+					Labels.NAME
+					};
+			return new android.support.v4.content.CursorLoader(
+					getActivity().getApplicationContext(), uri, projection, null, null, null);
+		}
+
+		// -------------------------------------------------------------------------
+		@Override
+		public void onLoadFinished(
+				android.support.v4.content.Loader<Cursor> loader, Cursor data) {
+			mAdapter.swapCursor(data);
+		}
+
+		// -------------------------------------------------------------------------
+		@Override
+		public void onLoaderReset(android.support.v4.content.Loader<Cursor> loader) {
+			mAdapter.swapCursor(null);
+		}
+	}
+	
+	public static class ExitDialog extends DialogFragment{
+		@Override
+		public Dialog onCreateDialog(Bundle savedInstanceState) {
+			AlertDialog.Builder builder = new AlertDialog.Builder (getActivity());
+			builder.setMessage (R.string.exit_question);
+			builder.setPositiveButton ( R.string.yes,
+				new DialogInterface.OnClickListener () {
+					@Override
+					public void onClick(DialogInterface dialog, int which) {
+						getActivity().finish ();
+					}
+				} );
+			builder.setNegativeButton ( R.string.no,
+				new DialogInterface.OnClickListener () {
+					@Override
+					public void onClick(DialogInterface dialog, int which) {
+						dialog.cancel ();
+					}
+				} );
+			builder.setCancelable ( false );
+			return builder.create ();
 		}
 	}
 }

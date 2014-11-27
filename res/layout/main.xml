@@ -5,7 +5,8 @@
     android:focusable="true"
     android:focusableInTouchMode="true"
     android:orientation="vertical"
-    android:padding="10dp" >
+    android:padding="10dp"
+    tools:context="com.tuoved.app.MainActivity" >
 
     <LinearLayout
         android:id="@+id/linearLayout_1"
@@ -31,19 +32,9 @@
         </Button>
         
     </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/linearLayout_2"
+    <FrameLayout
+        android:id="@+id/labels_container"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical" >
-        
-        <ListView
-            android:id="@android:id/list"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
-
-        
-    </LinearLayout>
+        android:layout_height="match_parent"/>
 
 </LinearLayout>
