@@ -27,6 +27,8 @@ import android.text.Editable;
 import android.text.TextWatcher;
 import android.text.format.DateFormat;
 import android.util.Log;
+import android.view.ContextMenu;
+import android.view.ContextMenu.ContextMenuInfo;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -35,13 +37,12 @@ import android.view.View.OnClickListener;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemClickListener;
-import android.widget.AdapterView.OnItemLongClickListener;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.TextView;
-import android.widget.Toast;
 
+import com.tuoved.app.MainActivity.ExitDialog;
 import com.tuoved.app.ProviderMetaData.Data;
 import com.tuoved.app.ProviderMetaData.Labels;
 
@@ -59,6 +60,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	
 	protected static final String SETTINGS_FILE = "settings";
 	protected static final String IS_STARTED = "is_started";
+	private static final int ACTION_DELETE = 0;
 	protected static final int ID_LOADER = 0;
 	protected static final long VIBR_MILLIS_SHORT = 20;
 	protected static long mLabelRowId = 0;
@@ -69,15 +71,12 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	protected static ListView mListView;
 	protected static boolean is_started = false;
 	protected static CountDownTimer timer;
-
-
-	private Cursor mCursor;
 	
 	protected EditText edit_relax_time, edit_repeats, edit_weight;
 	protected int relax_time, repeats;
 	protected float weight;
 	protected SharedPreferences settings;
-	protected int mSelectedRowId = 0;
+	protected long mSelectedRowId = 0;
 	
 
 	// --------------------------------------------------------------------------------------------
@@ -108,6 +107,28 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 			CharSequence text = is_started ? "Стоп" : "Старт";
 			btn_start.setText(text);
 		}
+
+	}
+	
+	@Override
+	public void onCreateContextMenu(ContextMenu menu, View v,
+			ContextMenuInfo menuInfo) {
+		menu.add(0, ACTION_DELETE, 0, R.string.delete_record);
+		super.onCreateContextMenu(menu, v, menuInfo);
+	}
+	
+	@Override
+	public boolean onContextItemSelected(MenuItem item) {
+		AdapterView.AdapterContextMenuInfo info = (AdapterView.AdapterContextMenuInfo)item.getMenuInfo();
+		switch(item.getItemId()) {
+		case ACTION_DELETE:
+			mSelectedRowId = info.id;
+			removeExercise(ExerciseActivity.this);
+			break;
+		default:
+			break;
+		}
+		return super.onContextItemSelected(item);
 	}
 	
 	@Override
@@ -128,7 +149,6 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	@Override
 		protected void onStop() {
 		Log.d(TAG, "onStop");
-		mCursor.close();
 		super.onStop();
 		}
 	@Override
@@ -147,6 +167,15 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		super.onDestroy();
 		}
 	
+	@Override
+	public void onBackPressed() {
+		if(is_started) {
+			ExitDialog.getInstance().show(getSupportFragmentManager(), null);
+		}
+		else
+			super.onBackPressed();
+	}
+	
 	//--------------------------------------------------------------------------
 	@Override
 	protected void onSaveInstanceState(Bundle outState) {
@@ -154,19 +183,6 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		super.onSaveInstanceState(outState);
 	}
 	
-	//--------------------------------------------------------------------------
-	private OnItemLongClickListener mItemLongClickListener = 
-			new OnItemLongClickListener() {
-		@Override
-		public boolean onItemLongClick(AdapterView<?> parent, View view,
-				int position, long id) {
-			mSelectedRowId = (int)id;
-			mVibrator.vibrate(VIBR_MILLIS_SHORT);
-			Toast.makeText(ExerciseActivity.this, "Selected row: " + position,
-					Toast.LENGTH_SHORT).show();
-			return false;
-		}
-	};
 	
 	//--------------------------------------------------------------------------
 	private OnItemClickListener mItemClickListener = new OnItemClickListener() {
@@ -186,6 +202,8 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		edit_weight = (EditText) findViewById ( R.id.editText_Weight );
 		text_timer = (TextView) findViewById ( R.id.timerView );
 		mListView = (ListView) findViewById(R.id.list_data);
+		if(mListView!=null)
+			registerForContextMenu(mListView);
 		
 	}
 	//--------------------------------------------------------------------------
@@ -197,32 +215,27 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		mLabelRowId = intent.getLongExtra( MainActivity.EXTRA_MESSAGE, 0 );
 		String pathSegment = String.valueOf(mLabelRowId);
 		final Uri uri = Labels.CONTENT_URI.buildUpon().appendPath(pathSegment).build();
-		mCursor = getContentResolver().query(uri, null, null, null, null);
-		if(mCursor != null) {
-			mCursor.moveToFirst();
-			mTitle = mCursor.getString(mCursor.getColumnIndex(Labels.NAME));
+		Cursor cursor = getContentResolver().query(uri, null, null, null, null);
+		if(cursor != null) {
+			cursor.moveToFirst();
+			mTitle = cursor.getString(cursor.getColumnIndex(Labels.NAME));
+			cursor.close();
+			cursor = null;
 		}
 		else
-			mTitle = "Unknown";
+			mTitle = "Exercises";
 		this.setTitle ( mTitle );
 	}
 	
 	//--------------------------------------------------------------------------
 	private void loadSettings() {
-		
 		settings = getSharedPreferences ( SETTINGS_FILE, MODE_PRIVATE );
-		if (settings.contains ( "RelaxTime" )){
-			relax_time = settings.getInt ( "RelaxTime", 30 );
-			edit_relax_time.setText ( Integer.toString ( relax_time ) );
-		}
-		if (settings.contains ( "RepeatNum" )) {
-			repeats = settings.getInt ( "RepeatNum", 10 );
-			edit_repeats.setText ( Integer.toString ( repeats ) );
-		}
-		if (settings.contains ( "Weight" ))	{
-			weight = settings.getFloat ( "Weight", 15 );
-			edit_weight.setText ( Float.toString ( weight ) );
-		}
+		relax_time = settings.getInt ( "RelaxTime", 30 );
+		edit_relax_time.setText ( Integer.toString ( relax_time ) );
+		repeats = settings.getInt ( "RepeatNum", 10 );
+		edit_repeats.setText ( Integer.toString ( repeats ) );
+		weight = settings.getFloat ( "Weight", 15 );
+		edit_weight.setText ( Float.toString ( weight ) );
 	}
 	
 	//--------------------------------------------------------------------------
@@ -248,7 +261,6 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		edit_relax_time.addTextChangedListener ( edit_time_watcher );
 		edit_repeats.addTextChangedListener ( editRepeatNumWatcher );
 		edit_weight.addTextChangedListener ( edit_weight_watcher );
-		mListView.setOnItemLongClickListener(mItemLongClickListener);
 		mListView.setOnItemClickListener(mItemClickListener);
 	}
 
@@ -442,20 +454,14 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	@Override
 	public boolean onOptionsItemSelected(MenuItem item)	{
 		switch (item.getItemId ()) {
-		case R.id.delete_record:
+		case R.id.delete_record: {
 			removeExercise( ExerciseActivity.this );
 			break;
-			
-		case android.R.id.home:
-			// This ID represents the Home or Up button. In the case of this
-			// activity, the Up button is shown. Use NavUtils to allow users
-			// to navigate up one level in the application structure. For
-			// more details, see the Navigation pattern on Android Design:
-			//
-			// http://developer.android.com/design/patterns/navigation.html#up-vs-back
-			//
-			NavUtils.navigateUpFromSameTask ( this );
+		}
+		case android.R.id.home: {
+			onBackPressed();
 			return true;
+		}
 		}
 		return super.onOptionsItemSelected ( item );
 	}
@@ -493,8 +499,8 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 			return;
 		ContentResolver cr = context.getContentResolver ();
 		Uri uri = Data.CONTENT_URI;
-		@SuppressWarnings("static-access")
-		Uri delUri = uri.withAppendedPath ( uri, Integer.toString ( mSelectedRowId ) );
+//		@SuppressWarnings("static-access")
+		Uri delUri = uri.buildUpon().appendPath(Long.toString (mSelectedRowId)).build();
 		Log.d ( TAG, "Del URI: " + delUri );
 		int number = cr.delete ( delUri, null, null );
 		Log.d ( TAG, "Deleted number: " + number );

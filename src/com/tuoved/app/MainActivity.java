@@ -14,9 +14,13 @@ import android.support.v4.app.FragmentActivity;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.app.ListFragment;
 import android.support.v4.app.LoaderManager.LoaderCallbacks;
+import android.support.v4.content.CursorLoader;
+import android.support.v4.content.Loader;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
+import android.view.ContextMenu;
+import android.view.ContextMenu.ContextMenuInfo;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -33,7 +37,8 @@ import com.tuoved.app.ProviderMetaData.Labels;
 
 public class MainActivity extends FragmentActivity  implements OnClickListener {
 	private static final String TAG = "MainActivity";
-	private static int mSelectedRowId = 0;
+	private static long mSelectedRowId = 0;
+	private static final int ACTION_DELETE = 0;
 	
 	public final static String EXTRA_MESSAGE = "com.tuoved.app.MESSAGE";
 	private EditText editText;
@@ -97,12 +102,31 @@ public class MainActivity extends FragmentActivity  implements OnClickListener {
 		}
 		return super.onOptionsItemSelected ( item );
 	}
+	
+	@Override
+	public void onCreateContextMenu(ContextMenu menu, View v,
+			ContextMenuInfo menuInfo) {
+		menu.add(0, ACTION_DELETE, 0, R.string.delete_record);
+		super.onCreateContextMenu(menu, v, menuInfo);
+	}
+	
+	@Override
+	public boolean onContextItemSelected(MenuItem item) {
+		AdapterView.AdapterContextMenuInfo info = (AdapterView.AdapterContextMenuInfo)item.getMenuInfo();
+		switch(item.getItemId()) {
+		case ACTION_DELETE:
+			mSelectedRowId = info.id;
+			deleteLabel();
+			break;
+		default:
+			break;
+		}
+		return super.onContextItemSelected(item);
+	}
 
 	// -------------------------------------------------------------------------
-	private void showExitDialog()
-	{
-		ExitDialog dialog = new ExitDialog();
-		dialog.show(getSupportFragmentManager(), "exit_dialog");
+	private void showExitDialog() {
+		ExitDialog.getInstance().show(getSupportFragmentManager(), null);
 	}
 
 	// -------------------------------------------------------------------------
@@ -199,9 +223,10 @@ public class MainActivity extends FragmentActivity  implements OnClickListener {
 			mAdapter = 	new android.support.v4.widget.SimpleCursorAdapter(getActivity(),
 					android.R.layout.simple_list_item_1,
 					null, FROM, TO , 0);
+			
 			setListAdapter(mAdapter);
 			ListView lw = getListView();
-			
+			registerForContextMenu(lw);
 			lw.setOnItemClickListener(new AdapterView.OnItemClickListener() {
 
 				@Override
@@ -213,48 +238,38 @@ public class MainActivity extends FragmentActivity  implements OnClickListener {
 						getActivity().startActivity ( intent );
 				}
 			});
-			
-			lw.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
-				@Override
-				public boolean onItemLongClick(AdapterView<?> parent,
-						View view, int position, long id) {
-					mSelectedRowId = (int)id;
-					Toast.makeText(getActivity(), "Selected row: " + position, Toast.LENGTH_SHORT)
-						.show();
-					return true;
-				}
-			});
-			
 		}
 		
 		// -------------------------------------------------------------------------
 		@Override
-		public android.support.v4.content.Loader<Cursor> onCreateLoader(
-				int loader, Bundle arg1) {
+		public Loader<Cursor> onCreateLoader(int loader, Bundle arg1) {
 			Uri uri = Labels.CONTENT_URI;
 			String[] projection = { 
-					Labels._ID, 
+					Labels._ID,
 					Labels.NAME
 					};
-			return new android.support.v4.content.CursorLoader(
-					getActivity().getApplicationContext(), uri, projection, null, null, null);
+			return new CursorLoader( getActivity().getApplicationContext(),
+					uri, projection, null, null, null);
 		}
 
 		// -------------------------------------------------------------------------
 		@Override
-		public void onLoadFinished(
-				android.support.v4.content.Loader<Cursor> loader, Cursor data) {
+		public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
 			mAdapter.swapCursor(data);
 		}
 
 		// -------------------------------------------------------------------------
 		@Override
-		public void onLoaderReset(android.support.v4.content.Loader<Cursor> loader) {
+		public void onLoaderReset(Loader<Cursor> loader) {
 			mAdapter.swapCursor(null);
 		}
 	}
 	
 	public static class ExitDialog extends DialogFragment{
+		
+		public static ExitDialog getInstance() {
+			return new ExitDialog();
+		}
 		@Override
 		public Dialog onCreateDialog(Bundle savedInstanceState) {
 			AlertDialog.Builder builder = new AlertDialog.Builder (getActivity());
