@@ -4,12 +4,11 @@
     <string name="app_name">FitLog</string>
     <string name="action_settings">Settings</string>
     <string name="edit_message">Добавьте упражнение</string>
-    <string name="button_send">Добавить</string>
+    <string name="button_add">Добавить</string>
     <string name="title_exercise_activity">Упражнения</string>
     <string name="time_to_end">30</string>
     <string name="message">Упражнение</string>
     <string name="enter_time">Введите длительность упражнения</string>
-    <string name="start">Старт</string>
     <string name="delete_item">Удалить</string>
     <string name="delete_record">Удалить запись</string>
     <string name="relax_time">Отдых(c)</string>
