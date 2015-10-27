@@ -2,10 +2,12 @@ package com.tuoved.app;
 
 import android.app.AlertDialog;
 import android.app.Dialog;
+import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
@@ -31,16 +33,20 @@ import android.widget.AdapterView;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ListView;
+import android.widget.TextView;
 import android.widget.Toast;
 
+import com.tuoved.app.ProviderMetaData.Data;
 import com.tuoved.app.ProviderMetaData.Labels;
 
 public class MainActivity extends FragmentActivity  implements OnClickListener {
 	private static final String TAG = "MainActivity";
+	private static final String HISTORY_IS_UPDATED = "history_is_updated";
 	private static long mSelectedRowId = 0;
 	private static final int ACTION_DELETE = 0;
+	private static final int ACTION_CLEAR_HISTORY = 1;
 	
-	public final static String EXTRA_MESSAGE = "com.tuoved.app.MESSAGE";
+	public final static String EXTRA_ID_EXERCISE = "com.tuoved.app.id_exercise";
 	private EditText editText;
 	private Button button_add;
 
@@ -49,12 +55,20 @@ public class MainActivity extends FragmentActivity  implements OnClickListener {
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate ( savedInstanceState );
 		setContentView ( R.layout.main );
-
+		SharedPreferences sp = getSharedPreferences ("settings", MODE_PRIVATE);
+		boolean history_is_updated = sp.getBoolean(HISTORY_IS_UPDATED, false);
+		if(!history_is_updated) {
+			update_history();
+			SharedPreferences.Editor editor = sp.edit();
+			editor.putBoolean(HISTORY_IS_UPDATED, true);
+			editor.commit();
+		}
 		editText = (EditText) findViewById ( R.id.editMessage );
-		button_add = (Button) findViewById ( R.id.buttonSend );
+		button_add = (Button) findViewById ( R.id.buttonAdd );
 		button_add.setEnabled ( false );
 		editText.addTextChangedListener ( editTextWatcher );
 		editText.clearFocus();
+		
 		FragmentManager fragmentManager = getSupportFragmentManager();
 		fragmentManager
 			.beginTransaction()
@@ -73,40 +87,27 @@ public class MainActivity extends FragmentActivity  implements OnClickListener {
 	public boolean onCreateOptionsMenu(Menu menu)
 	{
 		// Inflate the menu; this adds items to the action bar if it is present.
-		getMenuInflater ().inflate ( R.menu.main, menu );
+//		getMenuInflater ().inflate ( R.menu.exercise_list, menu );
 		return super.onCreateOptionsMenu(menu);
 	}
 	
 	// -------------------------------------------------------------------------
 	@Override
 	public boolean onPrepareOptionsMenu(Menu menu) {
-		MenuItem item = menu.findItem(R.id.deleteitem);
-		if(mSelectedRowId == 0)
-			item.setEnabled(false);
-		else
-			item.setEnabled(true);
 		return super.onPrepareOptionsMenu(menu);
 	}
 	// -------------------------------------------------------------------------
 	@Override
 	public boolean onOptionsItemSelected(MenuItem item)
 	{
-		// Log.d("MENU", "Clicked MenuItem is " + item.getTitle());
-		switch (item.getItemId ())
-		{
-		case R.id.deleteitem:
-			deleteLabel();
-			break;
-		default:
-			break;
-		}
 		return super.onOptionsItemSelected ( item );
 	}
 	
 	@Override
 	public void onCreateContextMenu(ContextMenu menu, View v,
 			ContextMenuInfo menuInfo) {
-		menu.add(0, ACTION_DELETE, 0, R.string.delete_record);
+		menu.add(0, ACTION_CLEAR_HISTORY, 0, R.string.clear_history);
+		menu.add(0, ACTION_DELETE, 0, R.string.delete);
 		super.onCreateContextMenu(menu, v, menuInfo);
 	}
 	
@@ -118,10 +119,78 @@ public class MainActivity extends FragmentActivity  implements OnClickListener {
 			mSelectedRowId = info.id;
 			deleteLabel();
 			break;
+		case ACTION_CLEAR_HISTORY:
+			if(clear_history(info.id) > 0)
+			{
+				TextView tv = (TextView)info.targetView.findViewById(android.R.id.text1);
+				String text = tv.getText().toString();
+				Toast.makeText(this, "История " + text +" очищена.", Toast.LENGTH_SHORT).show();
+			}
+			break;
 		default:
 			break;
 		}
 		return super.onContextItemSelected(item);
+	}
+	
+	private int clear_history(long id) {
+		String where = Data.LABEL_ID + "=?";
+		return getContentResolver().delete(Data.CONTENT_URI, where, new String[]{String.valueOf(id)});
+	}
+	
+	private void update_history() {
+		final String [] PROJECTION = 
+				new String[] {
+				Data._ID,
+				Data.DATE,
+				Data.LABEL_ID,
+				Data.COUNT_APPROACH,
+				Data.COUNT_TRAINING 
+		};
+		final long MILLIS_OF_TWO_HOUR = 60*60*2*1000;
+		final String SORT_ORDER = "data.label_id ASC, data._id ASC";
+		ContentResolver cr = getContentResolver();
+		
+		Cursor c = cr.query(Data.CONTENT_URI, PROJECTION, null, null, SORT_ORDER);
+		if(c!=null && c.moveToFirst())
+		{
+			int id = c.getInt(c.getColumnIndexOrThrow(Data._ID));
+			int prev_label_id = c.getInt(c.getColumnIndexOrThrow(Data.LABEL_ID));
+			long prev_date = c.getLong(c.getColumnIndexOrThrow(Data.DATE));
+			int count_approach = 1;
+			int count_training = 1;
+			ContentValues values = new ContentValues();
+			values.put(Data.COUNT_APPROACH, count_approach);
+			values.put(Data.COUNT_TRAINING, count_training);
+			Uri uri = Data.buildDataUriWithId(id);
+			cr.update(uri, values, null, null);
+
+			while(c.moveToNext()) {
+				id = c.getInt(c.getColumnIndexOrThrow(Data._ID));
+				int cur_label_id = c.getInt(c.getColumnIndexOrThrow(Data.LABEL_ID));
+				long cur_date = c.getLong(c.getColumnIndexOrThrow(Data.DATE));
+				if(prev_label_id == cur_label_id) {
+					count_approach++;
+					if((cur_date-prev_date) > MILLIS_OF_TWO_HOUR)
+					{
+						count_training++;
+						count_approach = 1;
+					}
+				}
+				else {
+					count_approach = 1;
+					count_training = 1;
+					prev_label_id = cur_label_id;
+				}
+				prev_date = cur_date;
+				values.clear();
+				values.put(Data.COUNT_APPROACH, count_approach);
+				values.put(Data.COUNT_TRAINING, count_training);
+				uri = Data.buildDataUriWithId(id);
+				cr.update(uri, values, null, null);
+			}
+			c.close();
+		}
 	}
 
 	// -------------------------------------------------------------------------
@@ -136,10 +205,7 @@ public class MainActivity extends FragmentActivity  implements OnClickListener {
 		public void onTextChanged(CharSequence s, int start, int before,
 			int count)
 		{
-			if (s.toString ().length () == 0)
-				button_add.setEnabled ( false );
-			else
-				button_add.setEnabled ( true );
+			button_add.setEnabled ( (s.toString ().length () == 0) ? false :true );
 		}
 		@Override
 		public void afterTextChanged(Editable s) { }
@@ -151,7 +217,7 @@ public class MainActivity extends FragmentActivity  implements OnClickListener {
 	// -------------------------------------------------------------------------
 	@Override
 	public void onClick(View v) {
-		if( v.getId() == R.id.buttonSend ){
+		if( v.getId() == R.id.buttonAdd ){
 			String label = (String)editText.getText().toString();
 			addLabel(this, label);
 			editText.setText(null);
@@ -209,7 +275,6 @@ public class MainActivity extends FragmentActivity  implements OnClickListener {
 		// -------------------------------------------------------------------------
 		@Override
 		public void onDestroyView() {
-			// TODO Auto-generated method stub
 			super.onDestroyView();
 			rootView = null;
 		}
@@ -233,7 +298,7 @@ public class MainActivity extends FragmentActivity  implements OnClickListener {
 				public void onItemClick(AdapterView<?> parent, View view,
 						int position, long id) {
 					Intent intent = new Intent ( getActivity(), ExerciseActivity.class );
-					intent.putExtra ( EXTRA_MESSAGE, id );
+					intent.putExtra ( EXTRA_ID_EXERCISE, id );
 					if( id > 0 )
 						getActivity().startActivity ( intent );
 				}

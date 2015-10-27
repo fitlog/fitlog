@@ -3,16 +3,20 @@ package com.tuoved.app;
 import java.util.HashMap;
 
 import android.content.ContentProvider;
+import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.UriMatcher;
 import android.database.Cursor;
+import android.database.SQLException;
 import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteException;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.database.sqlite.SQLiteQueryBuilder;
 import android.net.Uri;
 import android.text.TextUtils;
 import android.util.Log;
+import android.widget.Toast;
 
 import com.tuoved.app.ProviderMetaData.Data;
 import com.tuoved.app.ProviderMetaData.Labels;
@@ -21,7 +25,6 @@ import com.tuoved.app.ProviderMetaData.Labels;
 public class ExerciseProvider extends ContentProvider
 {
 	private static final String TAG = "ExerciseProvider";
-
 	// Создание карт проекций
 	private static HashMap<String, String> sProjectionMapLabels;
 	static {
@@ -38,6 +41,8 @@ public class ExerciseProvider extends ContentProvider
 		sProjectionMapData.put(Data.RELAX_TIME, Data.TABLE_NAME + "." + Data.RELAX_TIME);
 		sProjectionMapData.put(Data.DATE, Data.TABLE_NAME + "." + Data.DATE );
 		sProjectionMapData.put(Data.LABEL_ID, Data.TABLE_NAME + "." + Data.LABEL_ID);
+		sProjectionMapData.put(Data.COUNT_APPROACH, Data.TABLE_NAME + "." + Data.COUNT_APPROACH);
+		sProjectionMapData.put(Data.COUNT_TRAINING, Data.TABLE_NAME + "." + Data.COUNT_TRAINING);
 	}
 
 	// Создание Uri
@@ -70,7 +75,6 @@ public class ExerciseProvider extends ContentProvider
 	// данных
 	private static class DataBaseHelper extends SQLiteOpenHelper
 	{
-		
 		private static final String CREATE_LABELS_TABLE = "CREATE TABLE "
 				+ Labels.TABLE_NAME + " ("
 				+ Labels._ID + " INTEGER PRIMARY KEY AUTOINCREMENT, "
@@ -88,15 +92,21 @@ public class ExerciseProvider extends ContentProvider
 			+ Data.DATE + " LONG,"
 			+ Data.LABEL_ID + " INTEGER NOT NULL " + REFERENCES_LABELS_ID + ");";
 		
-		private static final String CREATE_TRIGGER_DELETE_EXERCISES = "CREATE TRIGGER "
+		private static final String CREATE_TRIGGER_DELETE_EXERCISES = "CREATE TRIGGER IF NOT EXISTS "
 				+ Triggers.EXERCISE_DELETE + " AFTER DELETE ON " + Labels.TABLE_NAME
 				+ " BEGIN DELETE FROM " + Data.TABLE_NAME + " WHERE " + " "
 				+ Data.LABEL_ID + "=old." + Labels._ID + ";" + "END;";
+		
+		private static final String ALTER_TABLE_EXERCISE_DATA_ADD_COLUMN_COUNT_APPROACH = "ALTER TABLE " 
+				+ Data.TABLE_NAME + " ADD COLUMN " + Data.COUNT_APPROACH + " INTEGER DEFAULT 0";
+		private static final String ALTER_TABLE_EXERCISE_DATA_ADD_COLUMN_COUNT_TRAINING = "ALTER TABLE "
+				+ Data.TABLE_NAME + " ADD COLUMN " + Data.COUNT_TRAINING + " INTEGER DEFAULT 0";
 
+		// ------------------------------------------------------------------------
 		DataBaseHelper(Context context)
 		{
 			super ( context, ProviderMetaData.DATABASE_NAME, null,
-				ProviderMetaData.DATABASE_VERSION );
+				ProviderMetaData.CUR_DATABASE_VERSION );
 		}
 
 		// ------------------------------------------------------------------------
@@ -107,6 +117,8 @@ public class ExerciseProvider extends ContentProvider
 			db.execSQL(CREATE_LABELS_TABLE);
 			db.execSQL(CREATE_DATA_TABLE);
 			db.execSQL(CREATE_TRIGGER_DELETE_EXERCISES);
+			db.execSQL(ALTER_TABLE_EXERCISE_DATA_ADD_COLUMN_COUNT_APPROACH);
+			db.execSQL(ALTER_TABLE_EXERCISE_DATA_ADD_COLUMN_COUNT_TRAINING);
 		}
 
 		// ------------------------------------------------------------------------
@@ -115,21 +127,82 @@ public class ExerciseProvider extends ContentProvider
 			Log.d ( TAG, "inner onUpgrade called" );
 			int version = oldVersion;
 			switch( version ) {
-			case ProviderMetaData.VER_LAUNCH:
-				// Version 2 added trigger for deleting from table Data, 
-				// which called deleting one or more items from table Labels
+			case ProviderMetaData.VER_FIRST: {
 				db.execSQL(CREATE_TRIGGER_DELETE_EXERCISES);
 				version = ProviderMetaData.VER_ADD_TRIGGER;
 			}
-			Log.d(TAG, "after upgrade logic, at version " + version);
+			case ProviderMetaData.VER_ADD_TRIGGER: {
+				updateToVer3(db);
+				version = ProviderMetaData.VER_ADD_COLUMNS_TO_DATA_TABLE;
+			}
+				
+			}
+			Log.d(TAG, "База данных обновлена до версии № " + version);
 			
-			if( version != ProviderMetaData.DATABASE_VERSION ) {
+			if( version != ProviderMetaData.CUR_DATABASE_VERSION ) {
 				db.execSQL( "DROP TABLE IF EXISTS " + Labels.TABLE_NAME );
 				db.execSQL ( "DROP TABLE IF EXISTS " + Data.TABLE_NAME );
-				
 				db.execSQL ( "DROP TRIGGER IF EXISTS " + Triggers.EXERCISE_DELETE );
+				onCreate (db);
+			}
+		}
+		
+		// ------------------------------------------------------------------------
+		private void updateToVer3(SQLiteDatabase db) {
+			db.execSQL(ALTER_TABLE_EXERCISE_DATA_ADD_COLUMN_COUNT_APPROACH);
+			db.execSQL(ALTER_TABLE_EXERCISE_DATA_ADD_COLUMN_COUNT_TRAINING);
+			fill_new_columns(db);
+		}
+		
+		private void fill_new_columns(SQLiteDatabase db) {
+			final String [] PROJECTION = 
+					new String[] {
+					Data._ID,
+					Data.DATE,
+					Data.LABEL_ID,
+					Data.COUNT_APPROACH,
+					Data.COUNT_TRAINING 
+			};
+			final long MILLIS_OF_TWO_HOUR = 60*60*2*1000;
+			final String SORT_ORDER = "data.label_id ASC, data._id ASC";
+			
+			Cursor c = db.query(Data.TABLE_NAME,PROJECTION, null, null, null, null, SORT_ORDER);
+			if(c!=null && c.moveToFirst())
+			{
+				int id = c.getInt(c.getColumnIndexOrThrow(Data._ID));
+				int prev_label_id = c.getInt(c.getColumnIndexOrThrow(Data.LABEL_ID));
+				long prev_date = c.getLong(c.getColumnIndexOrThrow(Data.DATE));
+				int count_approach = 1;
+				int count_training = 1;
+				ContentValues values = new ContentValues();
+				values.put(Data.COUNT_APPROACH, count_approach);
+				values.put(Data.COUNT_TRAINING, count_training);
+				db.update(Data.TABLE_NAME, values, "_id = ? ", new String[]{String.valueOf(id)});
 
-				onCreate ( db );
+				while(c.moveToNext()) {
+					id = c.getInt(c.getColumnIndexOrThrow(Data._ID));
+					int cur_label_id = c.getInt(c.getColumnIndexOrThrow(Data.LABEL_ID));
+					long cur_date = c.getLong(c.getColumnIndexOrThrow(Data.DATE));
+					if(prev_label_id == cur_label_id) {
+						count_approach++;
+						if((cur_date-prev_date) > MILLIS_OF_TWO_HOUR)
+						{
+							count_approach = 1;
+							count_training++;
+						}
+					}
+					else {
+						count_approach = 1;
+						count_training = 1;
+						prev_label_id = cur_label_id;
+					}
+					prev_date = cur_date;
+					values.clear();
+					values.put(Data.COUNT_APPROACH, count_approach);
+					values.put(Data.COUNT_TRAINING, count_training);
+					db.update(Data.TABLE_NAME, values, "_id = ? ", new String[]{String.valueOf(id)});
+				}
+				c.close();
 			}
 		}
 		
@@ -203,17 +276,23 @@ public class ExerciseProvider extends ContentProvider
 		final SQLiteDatabase db = mOpenHelper.getWritableDatabase ();
 		final int match = sUriMatcher.match ( uri );
 		long rowId = -1;
+		
 		switch(match){
 		case LABELS: {
-			rowId = db.insertOrThrow(Labels.TABLE_NAME, null, initialValues);
+			try {
+				rowId = db.insertOrThrow(Labels.TABLE_NAME, null, initialValues);
+			} catch(SQLiteException ex) {
+				Log.e(TAG, ex.toString());
+			}
 			getContext().getContentResolver().notifyChange(uri, null);
 			return Labels.buildLabelsUriWithId(rowId);
 		}
 		case DATA: {
-			Long now = Long.valueOf ( System.currentTimeMillis () );
-			if( !initialValues.containsKey(Data.DATE) )
-				initialValues.put(Data.DATE, now);
-			rowId = db.insertOrThrow(Data.TABLE_NAME, null, initialValues );
+			try {
+				rowId = db.insertOrThrow(Data.TABLE_NAME, null, initialValues );
+			} catch(SQLiteException ex) {
+				Log.e(TAG, ex.toString());
+			}
 			getContext ().getContentResolver ().notifyChange (uri, null);
 			return Data.buildDataUriWithId(rowId);
 		}
@@ -227,7 +306,6 @@ public class ExerciseProvider extends ContentProvider
 	public boolean onCreate()
 	{
 		mOpenHelper = new DataBaseHelper ( getContext () );
-		Log.d ( TAG, "main onCreate called" );
 		return true;
 	}
 
@@ -275,13 +353,16 @@ public class ExerciseProvider extends ContentProvider
 			throw new IllegalArgumentException ( "Unknown URI" + uri );
 		}
 		// Получение базы данных и выполнение запроса
-		
-		Cursor cursor = qb.query ( db, projection, selection, selectionArgs,
-			null, null, orderBy );
-
-		// Указание курсору на URi за которым необходимо наблюдать,
-		// чтобы не пропустить изменение исходных данных
-		cursor.setNotificationUri ( getContext ().getContentResolver (), uri );
+		Cursor cursor = null;
+		try {
+			cursor = qb.query ( db, projection, selection, selectionArgs,
+					null, null, orderBy );
+		}
+		catch( SQLiteException ex) {
+			Log.e(TAG, ex.toString() );
+		}
+		if(cursor != null)
+			cursor.setNotificationUri ( getContext ().getContentResolver (), uri );
 		return cursor;
 	}
 

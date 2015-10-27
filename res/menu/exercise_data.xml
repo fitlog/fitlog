@@ -4,6 +4,6 @@
         android:id="@+id/delete_record"
         android:icon="@android:drawable/ic_menu_delete"
         android:orderInCategory="100"
-        android:title="@string/delete_record"/>
+        android:title="@string/delete"/>
 
 </menu>

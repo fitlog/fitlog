@@ -24,11 +24,11 @@
         </EditText>
 
         <Button
-            android:id="@+id/buttonSend"
+            android:id="@+id/buttonAdd"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:onClick="onClick"
-            android:text="@string/button_add">
+            android:text="@string/add">
         </Button>
         
     </LinearLayout>

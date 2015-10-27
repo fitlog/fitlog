@@ -19,10 +19,9 @@ import android.os.Vibrator;
 import android.support.v4.app.FragmentActivity;
 import android.support.v4.app.LoaderManager;
 import android.support.v4.app.LoaderManager.LoaderCallbacks;
-import android.support.v4.app.NavUtils;
 import android.support.v4.content.CursorLoader;
 import android.support.v4.content.Loader;
-import android.support.v4.widget.SimpleCursorAdapter;
+import android.support.v4.widget.CursorAdapter;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.text.format.DateFormat;
@@ -30,7 +29,6 @@ import android.util.Log;
 import android.view.ContextMenu;
 import android.view.ContextMenu.ContextMenuInfo;
 import android.view.LayoutInflater;
-import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -43,7 +41,6 @@ import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.TextView;
 
-import com.tuoved.app.MainActivity.ExitDialog;
 import com.tuoved.app.ProviderMetaData.Data;
 import com.tuoved.app.ProviderMetaData.Labels;
 
@@ -59,26 +56,28 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	private static PowerManager mPowerManager;
 	private static PowerManager.WakeLock mWakeLock;
 	
-	protected static final String SETTINGS_FILE = "settings";
-	protected static final String IS_STARTED = "is_started";
+	private static final String SETTINGS_FILE = "settings";
+	private static final String IS_STARTED = "is_started";
 	private static final int ACTION_DELETE = 0;
-	protected static final int ID_LOADER = 0;
-	protected static final long VIBR_MILLIS_SHORT = 20;
-	protected static long mLabelRowId = 0;
-	protected static String mTitle;
-	protected static Button btn_start;
-	protected static TextView text_exercise;
-	protected static TextView text_timer;
-	protected static ListView mListView;
-	protected static boolean is_started = false;
-	protected static CountDownTimer timer;
+	private final long MILLIS_OF_TWO_HOURS = 2*60*60*1000;
+	private static final int ID_LOADER = 0;
+	private static final long VIBR_MILLIS_SHORT = 20;
+	private static long mLabelRowId = 0;
+	private static String mTitle;
+	private static Button btn_start;
+	private static TextView text_timer;
+	private static ListView mListView;
+	private static boolean is_started = false;
+	private static CountDownTimer timer;
 	
-	protected EditText edit_relax_time, edit_repeats, edit_weight;
-	protected int relax_time, repeats;
-	private long past_time;
-	protected float weight;
-	protected SharedPreferences settings;
-	protected long mSelectedRowId = 0;
+	private EditText edit_relax_time, edit_repeats, edit_weight;
+	private ExerciseData temp_data = new ExerciseData();
+	private ExerciseData data;
+	private int last_count_approach;
+	private int last_count_training;
+	private long last_date;
+	private Uri lastInsertedUri;
+	private SharedPreferences settings;
 	
 
 	// --------------------------------------------------------------------------------------------
@@ -87,7 +86,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	protected void onCreate(Bundle savedInstanceState)
 	{
 		super.onCreate ( savedInstanceState );
-		Log.d ( TAG, "onCreate: " + this.hashCode() );
+		Log.d ( TAG, "onCreate: ");
 		setContentView ( R.layout.activity_exercise );
 		setupActionBar();
 		getViewFromId();
@@ -106,16 +105,16 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		
 		if(savedInstanceState != null) {
 			is_started = savedInstanceState.getBoolean(IS_STARTED);
-			CharSequence text = is_started ? "Стоп" : "Старт";
-			btn_start.setText(text);
+			int resId = is_started ? R.string.continue_ : R.string.add;
+			btn_start.setText(resId);
 		}
-
+		
 	}
 	
 	@Override
 	public void onCreateContextMenu(ContextMenu menu, View v,
 			ContextMenuInfo menuInfo) {
-		menu.add(0, ACTION_DELETE, 0, R.string.delete_record);
+		menu.add(0, ACTION_DELETE, 0, R.string.delete);
 		super.onCreateContextMenu(menu, v, menuInfo);
 	}
 	
@@ -124,8 +123,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		AdapterView.AdapterContextMenuInfo info = (AdapterView.AdapterContextMenuInfo)item.getMenuInfo();
 		switch(item.getItemId()) {
 		case ACTION_DELETE:
-			mSelectedRowId = info.id;
-			removeExercise(ExerciseActivity.this);
+			removeExercise(this, info.id);
 			break;
 		default:
 			break;
@@ -133,31 +131,6 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		return super.onContextItemSelected(item);
 	}
 	
-	@Override
-		protected void onResume() {
-		Log.d(TAG, "onResume");
-		super.onResume();
-		}
-	@Override
-		protected void onStart() {
-		Log.d(TAG, "onStart");
-		super.onStart();
-		}
-	@Override
-		protected void onPause() {
-		Log.d(TAG, "onPause");
-		super.onPause();
-		}
-	@Override
-		protected void onStop() {
-		Log.d(TAG, "onStop");
-		super.onStop();
-		}
-	@Override
-		protected void onRestart() {
-		Log.d(TAG, "onRestart");
-		super.onRestart();
-		}
 	@SuppressLint("Wakelock")
 	@Override
 		protected void onDestroy() {
@@ -171,13 +144,17 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	
 	@Override
 	public void onBackPressed() {
-		if( is_started )			
+		if( is_started )
 		{
 			is_started = false;
-			btn_start.setText (R.string.button_add);
+			btn_start.setText (R.string.add);
 			text_timer.setText ("");
 			if( timer != null )
 				timer.cancel();
+			if( lastInsertedUri != null )
+				removeExercise(ExerciseActivity.this, lastInsertedUri);
+			if(text_timer.isShown())
+				text_timer.setVisibility(View.GONE);
 		}
 		else
 			super.onBackPressed();
@@ -208,9 +185,11 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		edit_repeats = (EditText) findViewById ( R.id.editText_RepeatNum );
 		edit_weight = (EditText) findViewById ( R.id.editText_Weight );
 		text_timer = (TextView) findViewById ( R.id.timerView );
+		text_timer.setVisibility(View.GONE);
 		mListView = (ListView) findViewById(R.id.list_data);
 		if(mListView!=null)
 			registerForContextMenu(mListView);
+		
 		
 	}
 	//--------------------------------------------------------------------------
@@ -219,7 +198,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 			this.setTitle ( mTitle );
 			return;
 		}
-		mLabelRowId = intent.getLongExtra( MainActivity.EXTRA_MESSAGE, 0 );
+		mLabelRowId = intent.getLongExtra( MainActivity.EXTRA_ID_EXERCISE, 0 );
 		String pathSegment = String.valueOf(mLabelRowId);
 		final Uri uri = Labels.CONTENT_URI.buildUpon().appendPath(pathSegment).build();
 		Cursor cursor = getContentResolver().query(uri, null, null, null, null);
@@ -236,32 +215,24 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	
 	//--------------------------------------------------------------------------
 	private void loadSettings() {
-		settings = getSharedPreferences ( SETTINGS_FILE, MODE_PRIVATE );
-		relax_time = settings.getInt ( "RelaxTime", 30 );
-		edit_relax_time.setText ( Integer.toString ( relax_time ) );
-		repeats = settings.getInt ( "RepeatNum", 10 );
-		edit_repeats.setText ( Integer.toString ( repeats ) );
-		weight = settings.getFloat ( "Weight", 15 );
-		edit_weight.setText ( Float.toString ( weight ) );
+		settings = getSharedPreferences (SETTINGS_FILE, MODE_PRIVATE);
+		temp_data.setRelax(settings.getLong ("Relax", 30));
+		edit_relax_time.setText ( Long.toString (temp_data.getTime()));
+		temp_data.setRepeats(settings.getInt ("RepeatNum", 10));
+		edit_repeats.setText ( Integer.toString (temp_data.getRepeats()));
+		temp_data.setWeight(settings.getFloat ("Weight", 15));
+		edit_weight.setText ( Float.toString ( temp_data.getWeight()));
 	}
 	
 	//--------------------------------------------------------------------------
 	private void fillData() {
 		mLoaderManager = getSupportLoaderManager();
 		mLoaderManager.initLoader(ID_LOADER, null, this);
-		final String[] FROM = {
-				Data.DATE,
-				Data.WEIGHT,
-				Data.REPEATS,
-				Data.RELAX_TIME
-		};
-		int[] to = { R.id.time, R.id.weight, R.id.repeats, R.id.relax };
-		mAdapter = new MyAdapter(this,
-				R.layout.row_item,
-				null, FROM, to, 0);
+		mAdapter = new MyAdapter(this, R.layout.row_item, null);
 		mListView.setAdapter(mAdapter);
 	}
 	
+	//--------------------------------------------------------------------------
 	private void registerListeners() {
 //		getListView().setOnItemLongClickListener(mItemLongClickListener);
 		btn_start.setOnClickListener ( this );
@@ -283,15 +254,17 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	{
 		@Override
 		public void onTextChanged(CharSequence s, int start, int before,
-			int count)
+				int count)
 		{
-			try	{
-				weight = Float.parseFloat ( s.toString () );
-			}
-			catch (NumberFormatException e)	{
-				weight = 0;
-			} finally {
-				savePreferences("Weight", weight);
+			if(temp_data!=null) {
+				try	{
+					temp_data.setWeight(Float.parseFloat (s.toString ()));
+				}
+				catch (NumberFormatException e)	{
+					temp_data.setWeight( 0 );
+				} finally {
+					savePreferences("Weight", temp_data.getWeight());
+				}
 			}
 		}
 		@Override
@@ -307,13 +280,15 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		@Override
 		public void onTextChanged(CharSequence s, int start, int before,
 				int count) {
-			try	{
-				relax_time = Integer.parseInt ( s.toString () );
-			}
-			catch (NumberFormatException e)	{
-				relax_time = 0;
-			} finally {
-				savePreferences("RelaxTime", relax_time);
+			if(temp_data!=null) {
+				try	{
+					temp_data.setRelax(Long.parseLong (s.toString ()));
+				}
+				catch (NumberFormatException e)	{
+					temp_data.setRelax(30);
+				} finally {
+					savePreferences("Relax", temp_data.getTime());
+				}
 			}
 		}
 
@@ -327,17 +302,18 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	// -------------------------------------------------------------------------
 	private TextWatcher editRepeatNumWatcher = new TextWatcher ()
 	{
-		@TargetApi(Build.VERSION_CODES.GINGERBREAD)
 		@Override
 		public void onTextChanged(CharSequence s, int start, int before,
-			int count) {
-			try	{
-				repeats = Integer.parseInt ( s.toString () );
-			}
-			catch (NumberFormatException e)	{
-				repeats = 3;
-			} finally {
-				savePreferences( "RepeatNum", repeats);
+				int count) {
+			if(temp_data!=null) {
+				try	{
+					temp_data.setRepeats(Integer.parseInt (s.toString ()));
+				}
+				catch (NumberFormatException e)	{
+					temp_data.setRepeats(0);
+				} finally {
+					savePreferences( "RepeatNum", temp_data.getRepeats());
+				}
 			}
 		}	
 
@@ -367,8 +343,16 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	}
 	
 	// -------------------------------------------------------------------------
+	void savePreferences(String key, long value) {
+		SharedPreferences settings = getSharedPreferences (
+				SETTINGS_FILE, MODE_PRIVATE );
+		SharedPreferences.Editor setEditor = settings.edit ();
+		setEditor.putLong( key, value );
+		setEditor.commit();
+	}
+	
+	// -------------------------------------------------------------------------
 	public void onFocusChange(View v, boolean hasFocus) {
-		// TODO Auto-generated method stub
 		switch( v.getId() )
 		{
 		case R.id.editText_Weight:
@@ -386,15 +370,17 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	// -------------------------------------------------------------------------
 	private void startTimer() {
 		
+		final long relax_time = temp_data.getTime();
 		final int procOfTime = (int)(0.1 * (double)relax_time);
 		final int redColor = getResources().getColor(R.color.red );
 		final int greenColor = getResources().getColor(R.color.green);
-		if(relax_time==0) {
-			past_time = 0;
+		if(relax_time == 0) {
 			onClick( btn_start );
 			return;
 		}
 		mWakeLock.acquire();
+		data = new ExerciseData(temp_data);
+		data.setRelax(0);
 		timer = new CountDownTimer ( 1000 * ( relax_time ), 500 ) {
 			StringBuilder builder = new StringBuilder();
 
@@ -402,21 +388,17 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 			public void onTick(long millisUntilFinished) {
 				builder.delete(0, builder.length());
 				long sec = millisUntilFinished / 1000;
-				past_time = relax_time - sec;
-				if (sec <= procOfTime)
-					text_timer.setTextColor (redColor);
-				else
-					text_timer.setTextColor (greenColor);
 				long minutes = sec/60;
 				long seconds = sec%60;
+				data.setRelax(relax_time - sec);
 				if(minutes < 10)
 					builder.append(0);
 				builder.append(minutes).append(" : ");
 				if(seconds < 10)
 					builder.append(0);
 				builder.append(seconds);
+				text_timer.setTextColor (sec <= procOfTime ? redColor : greenColor );
 				text_timer.setText (builder.toString());
-//				Log.d(TAG, "Timer.onTick:" + sec);
 			}
 			@Override
 			public void onFinish() {
@@ -427,7 +409,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 					if(mRingtone != null)
 						mRingtone.play();
 				}
-				catch( NullPointerException e ){
+				catch( NullPointerException e ) {
 					Log.e(TAG, "Ringtone is null", e);
 				}
 				Log.d(TAG, "Timer.onFinish");
@@ -445,6 +427,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		{
 		case R.id.button_Start:
 			if( !is_started ) {
+				text_timer.setVisibility(View.VISIBLE);
 				is_started = true;
 				mVibrator.vibrate(VIBR_MILLIS_SHORT);
 				btn_start.setText ("Продолжить");
@@ -453,12 +436,14 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 				edit_repeats.clearFocus();
 				edit_weight.clearFocus();
 				startTimer();
+				addExercise(ExerciseActivity.this);
 			}
 			else {
+				text_timer.setVisibility(View.GONE);
 				is_started = false;
-				btn_start.setText (R.string.button_add);
+				btn_start.setText (R.string.add);
 				text_timer.setText ("");
-				addExercise(ExerciseActivity.this);
+				updateExercise(ExerciseActivity.this);
 				if(timer != null)
 					timer.cancel ();
 			}
@@ -478,72 +463,65 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 			getActionBar ().setDisplayHomeAsUpEnabled ( true );
 		}
 	}
-
-	// -------------------------------------------------------------------------
-	@Override
-	public boolean onCreateOptionsMenu(Menu menu)
-	{
-		// Inflate the menu; this adds items to the action bar if it is present.
-		getMenuInflater ().inflate ( R.menu.show_message, menu );
-		return true;
-	}
-
-	// -------------------------------------------------------------------------
-	@Override
-	public boolean onOptionsItemSelected(MenuItem item)	{
-		switch (item.getItemId ()) {
-		case R.id.delete_record: {
-			removeExercise( ExerciseActivity.this );
-			break;
-		}
-		case android.R.id.home: {
-			onBackPressed();
-			return true;
-		}
-		}
-		return super.onOptionsItemSelected ( item );
-	}
-	
-	// -------------------------------------------------------------------------
-	@Override
-	public boolean onPrepareOptionsMenu(Menu menu) {
-		MenuItem item = menu.findItem(R.id.delete_record);
-		if(mSelectedRowId == 0)
-			item.setEnabled( false );
-		else
-			item.setEnabled( true );
-		return super.onPrepareOptionsMenu(menu);
-	}
 	
 	// -------------------------------------------------------------------------
 	public void addExercise( Context context )
 	{
 		ContentValues cv = new ContentValues ();
-		cv.put ( Data.WEIGHT, (Float)weight );
-		cv.put ( Data.REPEATS, (Integer)repeats );
-		cv.put ( Data.RELAX_TIME, (Long)past_time );
+		Long cur_date_time = Long.valueOf ( System.currentTimeMillis () );
+		int cur_approach;
+		int cur_training;
+		if((cur_date_time-last_date) > MILLIS_OF_TWO_HOURS ) {
+			cur_approach = 1;
+			cur_training = last_count_training + 1;
+		}
+		else {
+			cur_approach = last_count_approach + 1;
+			cur_training = last_count_training;
+		}		
+		cv.put(Data.DATE, cur_date_time);
+		cv.put ( Data.WEIGHT, (Float)data.getWeight() );
+		cv.put ( Data.REPEATS, (Integer)data.getRepeats() );
+		cv.put ( Data.RELAX_TIME, (Long)data.getTime() );
 		cv.put( Data.LABEL_ID, mLabelRowId );
+		cv.put( Data.COUNT_APPROACH, cur_approach);
+		cv.put( Data.COUNT_TRAINING, cur_training);
 		ContentResolver cr = context.getContentResolver ();
 		Uri uri = Data.CONTENT_URI;
 		Log.d ( TAG, "Exercise insert uri: " + uri );
-		Uri insertedUri = cr.insert ( uri, cv );
-		Log.d ( TAG, "Inserted URI: " + insertedUri );
+		lastInsertedUri = cr.insert ( uri, cv );
+		Log.d ( TAG, "Inserted URI: " + lastInsertedUri );
 		mLoaderManager.restartLoader(ID_LOADER, null, this);
 	}
 	
 	// -------------------------------------------------------------------------
-	public void removeExercise( Context context ) {
-		if( mSelectedRowId == 0)
-			return;
+	public void removeExercise( Context context, long id ) {
 		ContentResolver cr = context.getContentResolver ();
 		Uri uri = Data.CONTENT_URI;
-//		@SuppressWarnings("static-access")
-		Uri delUri = uri.buildUpon().appendPath(Long.toString (mSelectedRowId)).build();
+		Uri delUri = uri.buildUpon().appendPath(Long.toString (id)).build();
 		Log.d ( TAG, "Del URI: " + delUri );
 		int number = cr.delete ( delUri, null, null );
 		Log.d ( TAG, "Deleted number: " + number );
 		mLoaderManager.restartLoader(ID_LOADER, null, this);
-		mSelectedRowId = 0;
+	}
+	
+	// -------------------------------------------------------------------------
+	public void removeExercise( Context context, Uri delUri ) {
+		ContentResolver cr = context.getContentResolver ();
+		Log.d ( TAG, "Del URI: " + delUri );
+		int number = cr.delete ( delUri, null, null );
+		Log.d ( TAG, "Deleted number: " + number );
+		mLoaderManager.restartLoader(ID_LOADER, null, this);
+	}
+	
+	// -------------------------------------------------------------------------
+	public void updateExercise( Context context ) {
+		ContentValues cv = new ContentValues ();
+		cv.put ( Data.RELAX_TIME, (Long)data.getTime() );
+		ContentResolver cr = context.getContentResolver ();
+		int num_row = cr.update(lastInsertedUri, cv, null, null);
+		Log.d ( TAG, "Updated rows " + num_row );
+		mLoaderManager.restartLoader(ID_LOADER, null, this);
 	}
 	
 	// -------------------------------------------------------------------------
@@ -564,93 +542,174 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 				Data.WEIGHT,
 				Data.REPEATS,
 				Data.RELAX_TIME,
-				Data.LABEL_ID
+				Data.LABEL_ID,
+				Data.COUNT_APPROACH,
+				Data.COUNT_TRAINING
 		};
 		return new CursorLoader(getApplicationContext(), uri, projection, null, null, null);
 	}
 	
+	// -------------------------------------------------------------------------
 	@Override
 	public void onLoadFinished(Loader<Cursor> loader,
 			Cursor data) {
 		mAdapter.swapCursor(data);
+		if(data == null)
+			return;
+		final int pos = data.getCount()-1;
+		mListView.post(new Runnable() {
+		    @Override
+		    public void run() {
+		    	mListView.setSelection(pos);
+		        View v = mListView.getChildAt(pos);
+		        if (v != null) {
+		            v.requestFocus();
+		        }
+		    }
+		});
+		if(data.moveToLast()) {
+			last_count_approach = data.getInt(data.getColumnIndexOrThrow(Data.COUNT_APPROACH));
+			last_count_training = data.getInt(data.getColumnIndexOrThrow(Data.COUNT_TRAINING));
+			last_date = data.getLong(data.getColumnIndexOrThrow(Data.DATE));
+		}
+		else {
+			last_count_approach = 0;
+			last_count_training = 1;
+			last_date = System.currentTimeMillis();
+		}
 	}
-
+	// -------------------------------------------------------------------------
 	@Override
 	public void onLoaderReset(Loader<Cursor> loader) {
 		mAdapter.swapCursor(null);
 	}
 	
+	private class ViewHolder{
+		TextView tvHeader;
+		TextView tvTime;
+		TextView tvWeight;
+		TextView tvRepeats;
+		TextView tvRelax;
+	}
+	
 	// -------------------------------------------------------------------------
-	private class MyAdapter extends SimpleCursorAdapter {
-		private final CharSequence DATE_FORMAT = "dd-MM-yy (EEE)";
-		private final CharSequence TIME_FORMAT = "kk:mm";
-		private final long MILLIS_OF_DAY = 60*60*24*1000;
+	private class MyAdapter extends CursorAdapter {
+		private final CharSequence DATE_FORMAT = "dd-MM-yy (EEE) kk:mm";
+		
 		private LayoutInflater mInflater;
 		private int mLayout;
-
-		public MyAdapter(Context context, int layout, Cursor c, String[] from,
-				int[] to, int flags) {
-			super(context, layout, c, from, to, flags);
+		
+		public MyAdapter(Context context, int layout, Cursor c) {
+			super(context, c, false);
 			mInflater = (LayoutInflater)context.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
 			mLayout = layout;
 		}
 
 		@Override
 		public View newView(Context context, Cursor c, ViewGroup parent) {
-			return mInflater.inflate(mLayout, parent, false);
+			View v = mInflater.inflate(mLayout, parent, false);
+			ViewHolder holder = new ViewHolder();
+			holder.tvHeader = (TextView)v.findViewById(R.id.header);
+			holder.tvTime = (TextView)v.findViewById(R.id.time);
+			holder.tvWeight = (TextView)v.findViewById(R.id.weight);
+			holder.tvRepeats = (TextView)v.findViewById(R.id.repeats);
+			holder.tvRelax = (TextView)v.findViewById(R.id.relax);
+			v.setTag(holder);
+			return v;
 		}
 		
 		@Override
 		public void bindView(View v, Context context, Cursor c) {
-			if(c == null)
-				return;
-			int pos = c.getPosition();
-			long prev_millis = 0;
-			if((pos - 1) >= 0) {
-				c.moveToPosition(pos - 1);
-				prev_millis = c.getLong(c.getColumnIndexOrThrow(Data.DATE));
-				prev_millis -= prev_millis % MILLIS_OF_DAY;
+			ViewHolder holder = (ViewHolder) v.getTag();
+			int pos_cur = c.getPosition();
+			long time_prev_ms = 0;
+			int pos_prev = pos_cur-1;
+			if(pos_prev >= 0) {
+				c.moveToPosition(pos_prev);
+				time_prev_ms = c.getLong(c.getColumnIndexOrThrow(Data.DATE));
 			}
-			c.moveToPosition(pos);
-			long cur_millis = c.getLong(c.getColumnIndexOrThrow(Data.DATE));
-			long cur_temp = cur_millis - (cur_millis % MILLIS_OF_DAY);
-			String weight = c.getString(c.getColumnIndexOrThrow(Data.WEIGHT));
-			String repeats = c.getString(c.getColumnIndexOrThrow(Data.REPEATS));
-			String relax = c.getString(c.getColumnIndexOrThrow(Data.RELAX_TIME));
+			c.moveToPosition(pos_cur);
+			long time_cur_ms = c.getLong(c.getColumnIndexOrThrow(Data.DATE));
+
 			CharSequence dt = null;
-			
-			TextView tvHeader = (TextView)v.findViewById(R.id.header);
-			if( tvHeader != null ) {
-				if( cur_temp != prev_millis ) {
-					dt = DateFormat.format(DATE_FORMAT, cur_millis);
-					tvHeader.setText(dt);
-					tvHeader.setVisibility(View.VISIBLE);
+			if(holder.tvHeader != null) {
+				if( (time_cur_ms-time_prev_ms)>= MILLIS_OF_TWO_HOURS ) {
+					dt = DateFormat.format(DATE_FORMAT, time_cur_ms);
+					int count_training = c.getInt(c.getColumnIndexOrThrow(Data.COUNT_TRAINING));
+					holder.tvHeader.setText("["+String.valueOf(count_training)+"] "+dt);
+					holder.tvHeader.setVisibility(View.VISIBLE);
 				}
-				else
-					tvHeader.setVisibility(View.GONE);
+				else {
+					holder.tvHeader.setVisibility(View.GONE);
+				}
 			}
 			
-			TextView tvTime = (TextView)v.findViewById(R.id.time);
-			if( tvTime != null ) {
-				dt = DateFormat.format(TIME_FORMAT, cur_millis);
-				tvTime.setText(dt);
+			int count_approach = c.getInt(c.getColumnIndexOrThrow(Data.COUNT_APPROACH));
+			if(holder.tvTime != null) {
+				holder.tvTime.setText(String.valueOf(count_approach));
 			}
 			
-			TextView tvWeight = (TextView)v.findViewById(R.id.weight);
-			if(tvWeight != null) {
-				tvWeight.setTextColor(getResources().getColor(android.R.color.darker_gray));
-				tvWeight.setText(weight);
-			}
+			String weight = c.getString(c.getColumnIndexOrThrow(Data.WEIGHT));
+			if(holder.tvWeight != null)
+				holder.tvWeight.setText(weight);
 			
-			TextView tvRepeats = (TextView)v.findViewById(R.id.repeats);
-			if( tvRepeats != null )
-				tvRepeats.setText(repeats);
+			String repeats = c.getString(c.getColumnIndexOrThrow(Data.REPEATS));
+			if(holder.tvRepeats != null)
+				holder.tvRepeats.setText(repeats);
 			
-			TextView tvRelax = (TextView)v.findViewById(R.id.relax);
-			if(tvRelax != null)
-				tvRelax.setText(relax);
+			long time_relax = c.getLong(c.getColumnIndexOrThrow(Data.RELAX_TIME));
+			String relax = time_relax == 0 ? "-" : String.valueOf(time_relax);
+			if(holder.tvRelax != null)
+				holder.tvRelax.setText(relax);
 		}
 		
+	}
+	
+	// -------------------------------------------------------------------------
+	private class ExerciseData {
+		private int repeats;
+		private long time;
+		private float weight;
+		
+		public ExerciseData(float weight, int repeats, long time){
+			this.weight = weight;
+			this.repeats = repeats;
+			this.time = time;
+		}
+		
+		public ExerciseData(ExerciseData data) {
+			this(data.getWeight(), data.getRepeats(), data.getTime());
+		}
+		
+		public ExerciseData() {
+			this.weight = 0;
+			this.repeats = 0;
+			this.time = 0;
+		}
+		
+		public void setWeight(float weight) {
+			this.weight = weight;
+		}
+		
+		public float getWeight() {
+			return this.weight;
+		}
+		
+		public void setRepeats(int repeats) {
+			this.repeats = repeats;
+		}
+		
+		public int getRepeats() {
+			return this.repeats;
+		}
+		
+		public void setRelax(long time) {
+			this.time = time;
+		}
+		
+		public long getTime() {
+			return this.time;
+		}
 	}
 }
 
