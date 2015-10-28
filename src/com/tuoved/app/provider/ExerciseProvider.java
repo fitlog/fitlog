@@ -1,14 +1,12 @@
-package com.tuoved.app;
+package com.tuoved.app.provider;
 
 import java.util.HashMap;
 
 import android.content.ContentProvider;
-import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.UriMatcher;
 import android.database.Cursor;
-import android.database.SQLException;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteException;
 import android.database.sqlite.SQLiteOpenHelper;
@@ -16,10 +14,9 @@ import android.database.sqlite.SQLiteQueryBuilder;
 import android.net.Uri;
 import android.text.TextUtils;
 import android.util.Log;
-import android.widget.Toast;
 
-import com.tuoved.app.ProviderMetaData.Data;
-import com.tuoved.app.ProviderMetaData.Labels;
+import com.tuoved.app.provider.ProviderMetaData.Data;
+import com.tuoved.app.provider.ProviderMetaData.Labels;
 
 
 public class ExerciseProvider extends ContentProvider
@@ -214,7 +211,6 @@ public class ExerciseProvider extends ContentProvider
 	@Override
 	public int delete(Uri uri, String where, String[] whereArgs)
 	{
-		// TODO Auto-generated method stub
 		SQLiteDatabase db = mOpenHelper.getWritableDatabase ();
 		int count = 0;
 		String rowId = "";
@@ -251,7 +247,6 @@ public class ExerciseProvider extends ContentProvider
 	@Override
 	public String getType(Uri uri)
 	{
-		// TODO Auto-generated method stub
 		switch (sUriMatcher.match ( uri ))
 		{
 		case LABELS:
@@ -314,7 +309,6 @@ public class ExerciseProvider extends ContentProvider
 	public Cursor query(Uri uri, String[] projection, String selection,
 		String[] selectionArgs, String sortOrder)
 	{
-		// TODO Auto-generated method stub
 		SQLiteQueryBuilder qb = new SQLiteQueryBuilder ();
 		final SQLiteDatabase db = mOpenHelper.getReadableDatabase ();
 		String orderBy = null;
@@ -371,7 +365,6 @@ public class ExerciseProvider extends ContentProvider
 	public int update(Uri uri, ContentValues values, String where,
 		String[] whereArgs)
 	{
-		// TODO Auto-generated method stub
 		SQLiteDatabase db = mOpenHelper.getWritableDatabase ();
 		int count = 0;
 		String rowId = "";

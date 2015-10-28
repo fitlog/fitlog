@@ -1,6 +1,5 @@
-package com.tuoved.app;
+package com.tuoved.app.ui;
 
-import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.content.ContentResolver;
 import android.content.ContentValues;
@@ -23,7 +22,6 @@ import android.support.v4.content.CursorLoader;
 import android.support.v4.content.Loader;
 import android.support.v4.widget.CursorAdapter;
 import android.text.Editable;
-import android.text.TextWatcher;
 import android.text.format.DateFormat;
 import android.util.Log;
 import android.view.ContextMenu;
@@ -34,15 +32,22 @@ import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.View.OnFocusChangeListener;
 import android.view.ViewGroup;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemClickListener;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.TextView;
 
-import com.tuoved.app.ProviderMetaData.Data;
-import com.tuoved.app.ProviderMetaData.Labels;
+import com.tuoved.app.R;
+import com.tuoved.app.R.color;
+import com.tuoved.app.R.id;
+import com.tuoved.app.R.layout;
+import com.tuoved.app.R.string;
+import com.tuoved.app.provider.ProviderMetaData.Data;
+import com.tuoved.app.provider.ProviderMetaData.Labels;
+import com.tuoved.app.utils.EditTextExtended;
+import com.tuoved.app.utils.TextWatcherExtended;
 
 public class ExerciseActivity extends FragmentActivity implements OnClickListener, LoaderCallbacks<Cursor>, OnFocusChangeListener
 {
@@ -70,7 +75,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	private static boolean is_started = false;
 	private static CountDownTimer timer;
 	
-	private EditText edit_relax_time, edit_repeats, edit_weight;
+	private EditTextExtended etRelax, etRepeats, etWeight;
 	private ExerciseData temp_data = new ExerciseData();
 	private ExerciseData data;
 	private int last_count_approach;
@@ -81,7 +86,6 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	
 
 	// --------------------------------------------------------------------------------------------
-	// @SuppressLint("ResourceAsColor")
 	@Override
 	protected void onCreate(Bundle savedInstanceState)
 	{
@@ -111,6 +115,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		
 	}
 	
+	// --------------------------------------------------------------------------------------------
 	@Override
 	public void onCreateContextMenu(ContextMenu menu, View v,
 			ContextMenuInfo menuInfo) {
@@ -118,6 +123,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		super.onCreateContextMenu(menu, v, menuInfo);
 	}
 	
+	// --------------------------------------------------------------------------------------------
 	@Override
 	public boolean onContextItemSelected(MenuItem item) {
 		AdapterView.AdapterContextMenuInfo info = (AdapterView.AdapterContextMenuInfo)item.getMenuInfo();
@@ -131,17 +137,16 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		return super.onContextItemSelected(item);
 	}
 	
-	@SuppressLint("Wakelock")
+	// --------------------------------------------------------------------------------------------
 	@Override
 		protected void onDestroy() {
 		Log.d(TAG, "onDestroy");
 		if(timer!=null)
 			timer.cancel();
-		if(mWakeLock.isHeld())
-			mWakeLock.release();
 		super.onDestroy();
 		}
 	
+	// --------------------------------------------------------------------------------------------
 	@Override
 	public void onBackPressed() {
 		if( is_started )
@@ -181,9 +186,9 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	private void getViewFromId() {
 		// Initialization layout variables
 		btn_start = (Button) findViewById ( R.id.button_Start );
-		edit_relax_time = (EditText) findViewById ( R.id.editTextTime );
-		edit_repeats = (EditText) findViewById ( R.id.editText_RepeatNum );
-		edit_weight = (EditText) findViewById ( R.id.editText_Weight );
+		etRelax = (EditTextExtended) findViewById ( R.id.etRelax );
+		etRepeats = (EditTextExtended) findViewById ( R.id.etRepeats );
+		etWeight = (EditTextExtended) findViewById ( R.id.etWeight );
 		text_timer = (TextView) findViewById ( R.id.timerView );
 		text_timer.setVisibility(View.GONE);
 		mListView = (ListView) findViewById(R.id.list_data);
@@ -217,11 +222,11 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	private void loadSettings() {
 		settings = getSharedPreferences (SETTINGS_FILE, MODE_PRIVATE);
 		temp_data.setRelax(settings.getLong ("Relax", 30));
-		edit_relax_time.setText ( Long.toString (temp_data.getTime()));
+		etRelax.setText ( Long.toString (temp_data.getTime()));
 		temp_data.setRepeats(settings.getInt ("RepeatNum", 10));
-		edit_repeats.setText ( Integer.toString (temp_data.getRepeats()));
+		etRepeats.setText ( Integer.toString (temp_data.getRepeats()));
 		temp_data.setWeight(settings.getFloat ("Weight", 15));
-		edit_weight.setText ( Float.toString ( temp_data.getWeight()));
+		etWeight.setText ( Float.toString ( temp_data.getWeight()));
 	}
 	
 	//--------------------------------------------------------------------------
@@ -234,53 +239,43 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	
 	//--------------------------------------------------------------------------
 	private void registerListeners() {
-//		getListView().setOnItemLongClickListener(mItemLongClickListener);
-		btn_start.setOnClickListener ( this );
-		edit_weight.addTextChangedListener ( edit_weight_watcher );
-		edit_weight.setOnFocusChangeListener(this);
-		edit_weight.setSelectAllOnFocus(true);
-		edit_repeats.addTextChangedListener ( editRepeatNumWatcher );
-		edit_repeats.setOnFocusChangeListener(this);
-		edit_repeats.setSelectAllOnFocus(true);
-		edit_relax_time.addTextChangedListener ( edit_time_watcher );		
-		edit_relax_time.setOnFocusChangeListener(this);
-		edit_relax_time.setSelectAllOnFocus(true);
+		btn_start.setOnClickListener (this);
+		btn_start.setOnFocusChangeListener(this);
+		etWeight.addTextChangedListener ( mEditTextWatcher );
+		etWeight.setOnFocusChangeListener(this);
+		etWeight.setSelectAllOnFocus(true);
+		etRepeats.addTextChangedListener ( mEditTextWatcher );
+		etRepeats.setOnFocusChangeListener(this);
+		etRepeats.setSelectAllOnFocus(true);
+		etRelax.addTextChangedListener ( mEditTextWatcher );		
+		etRelax.setOnFocusChangeListener(this);
+		etRelax.setSelectAllOnFocus(true);
 		mListView.setOnItemClickListener(mItemClickListener);
 		
 	}
 
 	// -------------------------------------------------------------------------
-	private TextWatcher edit_weight_watcher = new TextWatcher ()
+	private TextWatcherExtended mEditTextWatcher = new TextWatcherExtended ()
 	{
 		@Override
-		public void onTextChanged(CharSequence s, int start, int before,
+		public void onTextChanged(View v, CharSequence s, int start, int before,
 				int count)
 		{
-			if(temp_data!=null) {
+			if(temp_data==null) 
+				return;
+			switch(v.getId()) {
+			case R.id.etWeight: {
 				try	{
 					temp_data.setWeight(Float.parseFloat (s.toString ()));
 				}
 				catch (NumberFormatException e)	{
-					temp_data.setWeight( 0 );
+					temp_data.setWeight(0);
 				} finally {
 					savePreferences("Weight", temp_data.getWeight());
 				}
+				break;
 			}
-		}
-		@Override
-		public void afterTextChanged(Editable s) {}
-		@Override
-		public void beforeTextChanged(CharSequence s, int start, int count,
-			int after) {}
-	};
-
-	// -------------------------------------------------------------------------
-	private TextWatcher edit_time_watcher = new TextWatcher ()
-	{
-		@Override
-		public void onTextChanged(CharSequence s, int start, int before,
-				int count) {
-			if(temp_data!=null) {
+			case R.id.etRelax: {
 				try	{
 					temp_data.setRelax(Long.parseLong (s.toString ()));
 				}
@@ -289,23 +284,9 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 				} finally {
 					savePreferences("Relax", temp_data.getTime());
 				}
+				break;
 			}
-		}
-
-		@Override
-		public void afterTextChanged(Editable s) {}
-		@Override
-		public void beforeTextChanged(CharSequence s, int start, int count,
-			int after) {}
-	};
-
-	// -------------------------------------------------------------------------
-	private TextWatcher editRepeatNumWatcher = new TextWatcher ()
-	{
-		@Override
-		public void onTextChanged(CharSequence s, int start, int before,
-				int count) {
-			if(temp_data!=null) {
+			case R.id.etRepeats: {
 				try	{
 					temp_data.setRepeats(Integer.parseInt (s.toString ()));
 				}
@@ -314,13 +295,17 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 				} finally {
 					savePreferences( "RepeatNum", temp_data.getRepeats());
 				}
+				break;
 			}
-		}	
-
+			default:
+				return;
+			}
+		}
+		
 		@Override
-		public void afterTextChanged(Editable s) {}
+		public void afterTextChanged(View v, Editable s) {}
 		@Override
-		public void beforeTextChanged(CharSequence s, int start, int count,
+		public void beforeTextChanged(View v, CharSequence s, int start, int count,
 			int after) {}
 	};
 	
@@ -355,16 +340,21 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	public void onFocusChange(View v, boolean hasFocus) {
 		switch( v.getId() )
 		{
-		case R.id.editText_Weight:
-			edit_weight.setSelection(0, edit_weight.getText().length() );
+		case R.id.etWeight:
+			etWeight.setSelection(0, etWeight.getText().length() );
 			break;
-		case R.id.editText_RepeatNum:
-			edit_repeats.setSelection(0, edit_repeats.getText().length() );
+		case R.id.etRepeats:
+			etRepeats.setSelection(0, etRepeats.getText().length() );
 			break;
-		case R.id.editTextTime:
-			edit_relax_time.setSelection(0, edit_relax_time.getText().length());
+		case R.id.etRelax:
+			etRelax.setSelection(0, etRelax.getText().length());
 			break;
+		case R.id.button_Start:
+			InputMethodManager imm = (InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
+		    imm.hideSoftInputFromWindow(v.getWindowToken(), 0);
+		    break;
 		}
+		
 	}
 
 	// -------------------------------------------------------------------------
@@ -423,6 +413,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	@Override
 	public void onClick(View v)
 	{
+		onFocusChange(v, true);
 		switch (v.getId ())
 		{
 		case R.id.button_Start:
@@ -432,9 +423,9 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 				mVibrator.vibrate(VIBR_MILLIS_SHORT);
 				btn_start.setText ("Продолжить");
 				text_timer.setText ("");
-				edit_relax_time.clearFocus();
-				edit_repeats.clearFocus();
-				edit_weight.clearFocus();
+				etRelax.clearFocus();
+				etRepeats.clearFocus();
+				etWeight.clearFocus();
 				startTimer();
 				addExercise(ExerciseActivity.this);
 			}
@@ -446,6 +437,8 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 				updateExercise(ExerciseActivity.this);
 				if(timer != null)
 					timer.cancel ();
+				if(mWakeLock.isHeld())
+					mWakeLock.release();
 			}
 			break;
 		default:

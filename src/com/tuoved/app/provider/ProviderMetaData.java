@@ -1,4 +1,4 @@
-package com.tuoved.app;
+package com.tuoved.app.provider;
 
 import android.content.ContentUris;
 import android.net.Uri;

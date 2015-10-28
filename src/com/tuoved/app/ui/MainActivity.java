@@ -1,4 +1,4 @@
-package com.tuoved.app;
+package com.tuoved.app.ui;
 
 import android.app.AlertDialog;
 import android.app.Dialog;
@@ -36,8 +36,12 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.tuoved.app.ProviderMetaData.Data;
-import com.tuoved.app.ProviderMetaData.Labels;
+import com.tuoved.app.R;
+import com.tuoved.app.R.id;
+import com.tuoved.app.R.layout;
+import com.tuoved.app.R.string;
+import com.tuoved.app.provider.ProviderMetaData.Data;
+import com.tuoved.app.provider.ProviderMetaData.Labels;
 
 public class MainActivity extends FragmentActivity  implements OnClickListener {
 	private static final String TAG = "MainActivity";

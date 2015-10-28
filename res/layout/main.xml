@@ -6,7 +6,7 @@
     android:focusableInTouchMode="true"
     android:orientation="vertical"
     android:padding="10dp"
-    tools:context="com.tuoved.app.MainActivity" >
+    tools:context="com.tuoved.app.ui.MainActivity" >
 
     <LinearLayout
         android:id="@+id/linearLayout_1"
