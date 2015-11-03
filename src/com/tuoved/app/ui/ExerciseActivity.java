@@ -15,7 +15,10 @@ import android.os.Bundle;
 import android.os.CountDownTimer;
 import android.os.PowerManager;
 import android.os.Vibrator;
+import android.support.v4.app.DialogFragment;
+import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentActivity;
+import android.support.v4.app.FragmentTransaction;
 import android.support.v4.app.LoaderManager;
 import android.support.v4.app.LoaderManager.LoaderCallbacks;
 import android.support.v4.content.CursorLoader;
@@ -34,22 +37,21 @@ import android.view.View.OnFocusChangeListener;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.AdapterView;
-import android.widget.AdapterView.OnItemClickListener;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.tuoved.app.R;
-import com.tuoved.app.R.color;
-import com.tuoved.app.R.id;
-import com.tuoved.app.R.layout;
-import com.tuoved.app.R.string;
 import com.tuoved.app.provider.ProviderMetaData.Data;
 import com.tuoved.app.provider.ProviderMetaData.Labels;
 import com.tuoved.app.utils.EditTextExtended;
+import com.tuoved.app.utils.ExerciseData;
 import com.tuoved.app.utils.TextWatcherExtended;
+import com.tuoved.app.utils.Utils;
 
-public class ExerciseActivity extends FragmentActivity implements OnClickListener, LoaderCallbacks<Cursor>, OnFocusChangeListener
+public class ExerciseActivity extends FragmentActivity implements OnClickListener, LoaderCallbacks<Cursor>, OnFocusChangeListener 
 {
 	protected static final String TAG = "ExerciseActivity";
 	
@@ -63,7 +65,8 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	
 	private static final String SETTINGS_FILE = "settings";
 	private static final String IS_STARTED = "is_started";
-	private static final int ACTION_DELETE = 0;
+	private static final int ACTION_DELETE = 1;
+	private static final int ACTION_CHANGE = 0;
 	private final long MILLIS_OF_TWO_HOURS = 2*60*60*1000;
 	private static final int ID_LOADER = 0;
 	private static final long VIBR_MILLIS_SHORT = 20;
@@ -91,7 +94,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	{
 		super.onCreate ( savedInstanceState );
 		Log.d ( TAG, "onCreate: ");
-		setContentView ( R.layout.activity_exercise );
+		setContentView (R.layout.activity_exercise );
 		setupActionBar();
 		getViewFromId();
 		loadSettings();
@@ -119,6 +122,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	@Override
 	public void onCreateContextMenu(ContextMenu menu, View v,
 			ContextMenuInfo menuInfo) {
+		menu.add(0, ACTION_CHANGE, 0, R.string.change);
 		menu.add(0, ACTION_DELETE, 0, R.string.delete);
 		super.onCreateContextMenu(menu, v, menuInfo);
 	}
@@ -128,9 +132,27 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	public boolean onContextItemSelected(MenuItem item) {
 		AdapterView.AdapterContextMenuInfo info = (AdapterView.AdapterContextMenuInfo)item.getMenuInfo();
 		switch(item.getItemId()) {
-		case ACTION_DELETE:
-			removeExercise(this, info.id);
+		case ACTION_CHANGE: {
+			final String tag = "dialog";
+			FragmentTransaction ft = getSupportFragmentManager().beginTransaction();
+		    Fragment prev = getSupportFragmentManager().findFragmentByTag(tag);
+		    if (prev != null) {
+		        ft.remove(prev);
+		    }
+		    ft.addToBackStack(null);
+
+		    DialogFragment newFragment = ExerciseDataChangeDialog.newInstance(info.id);
+		    newFragment.show(ft, tag);
 			break;
+		}
+		case ACTION_DELETE:	{
+			Uri delUri = Data.buildDataUriWithId(info.id);
+			boolean isLastInsertedUri = delUri.equals(lastInsertedUri);
+			if(is_started && isLastInsertedUri)
+				cancelTimer();
+			removeExercise(this, delUri);
+			break;
+		}
 		default:
 			break;
 		}
@@ -143,23 +165,17 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		Log.d(TAG, "onDestroy");
 		if(timer!=null)
 			timer.cancel();
+		mLoaderManager.destroyLoader(ID_LOADER);
 		super.onDestroy();
 		}
 	
 	// --------------------------------------------------------------------------------------------
 	@Override
 	public void onBackPressed() {
-		if( is_started )
-		{
-			is_started = false;
-			btn_start.setText (R.string.add);
-			text_timer.setText ("");
-			if( timer != null )
-				timer.cancel();
-			if( lastInsertedUri != null )
+		if( is_started ) {
+			cancelTimer();
+			if(lastInsertedUri != null)
 				removeExercise(ExerciseActivity.this, lastInsertedUri);
-			if(text_timer.isShown())
-				text_timer.setVisibility(View.GONE);
 		}
 		else
 			super.onBackPressed();
@@ -172,16 +188,6 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		super.onSaveInstanceState(outState);
 	}
 	
-	
-	//--------------------------------------------------------------------------
-	private OnItemClickListener mItemClickListener = new OnItemClickListener() {
-
-		@Override
-		public void onItemClick(AdapterView<?> parent, View view, int position,
-				long id) {
-			
-		}
-	};
 	//--------------------------------------------------------------------------
 	private void getViewFromId() {
 		// Initialization layout variables
@@ -207,8 +213,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		String pathSegment = String.valueOf(mLabelRowId);
 		final Uri uri = Labels.CONTENT_URI.buildUpon().appendPath(pathSegment).build();
 		Cursor cursor = getContentResolver().query(uri, null, null, null, null);
-		if(cursor != null) {
-			cursor.moveToFirst();
+		if(cursor != null && cursor.moveToFirst()) {
 			mTitle = cursor.getString(cursor.getColumnIndex(Labels.NAME));
 			cursor.close();
 			cursor = null;
@@ -222,11 +227,11 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	private void loadSettings() {
 		settings = getSharedPreferences (SETTINGS_FILE, MODE_PRIVATE);
 		temp_data.setRelax(settings.getLong ("Relax", 30));
-		etRelax.setText ( Long.toString (temp_data.getTime()));
+		etRelax.setText ( Long.toString (temp_data.relax()));
 		temp_data.setRepeats(settings.getInt ("RepeatNum", 10));
-		etRepeats.setText ( Integer.toString (temp_data.getRepeats()));
+		etRepeats.setText ( Integer.toString (temp_data.repeats()));
 		temp_data.setWeight(settings.getFloat ("Weight", 15));
-		etWeight.setText ( Float.toString ( temp_data.getWeight()));
+		etWeight.setText ( Float.toString ( temp_data.weight()));
 	}
 	
 	//--------------------------------------------------------------------------
@@ -250,8 +255,6 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		etRelax.addTextChangedListener ( mEditTextWatcher );		
 		etRelax.setOnFocusChangeListener(this);
 		etRelax.setSelectAllOnFocus(true);
-		mListView.setOnItemClickListener(mItemClickListener);
-		
 	}
 
 	// -------------------------------------------------------------------------
@@ -266,34 +269,34 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 			switch(v.getId()) {
 			case R.id.etWeight: {
 				try	{
-					temp_data.setWeight(Float.parseFloat (s.toString ()));
+					temp_data.setWeight(Float.valueOf(s.toString ()));
 				}
 				catch (NumberFormatException e)	{
 					temp_data.setWeight(0);
 				} finally {
-					savePreferences("Weight", temp_data.getWeight());
+					savePreferences("Weight", temp_data.weight());
 				}
 				break;
 			}
 			case R.id.etRelax: {
 				try	{
-					temp_data.setRelax(Long.parseLong (s.toString ()));
+					temp_data.setRelax(Long.valueOf(s.toString ()));
 				}
 				catch (NumberFormatException e)	{
 					temp_data.setRelax(30);
 				} finally {
-					savePreferences("Relax", temp_data.getTime());
+					savePreferences("Relax", temp_data.relax());
 				}
 				break;
 			}
 			case R.id.etRepeats: {
 				try	{
-					temp_data.setRepeats(Integer.parseInt (s.toString ()));
+					temp_data.setRepeats(Integer.valueOf(s.toString ()));
 				}
 				catch (NumberFormatException e)	{
 					temp_data.setRepeats(0);
 				} finally {
-					savePreferences( "RepeatNum", temp_data.getRepeats());
+					savePreferences( "RepeatNum", temp_data.repeats());
 				}
 				break;
 			}
@@ -350,20 +353,28 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 			etRelax.setSelection(0, etRelax.getText().length());
 			break;
 		case R.id.button_Start:
-			InputMethodManager imm = (InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
-		    imm.hideSoftInputFromWindow(v.getWindowToken(), 0);
+			Utils.hideKeyboard(this, v);
 		    break;
 		}
-		
 	}
 
 	// -------------------------------------------------------------------------
 	private void startTimer() {
 		
-		final long relax_time = temp_data.getTime();
+		final long relax_time = temp_data.relax();
 		final int procOfTime = (int)(0.1 * (double)relax_time);
 		final int redColor = getResources().getColor(R.color.red );
 		final int greenColor = getResources().getColor(R.color.green);
+		
+		text_timer.setVisibility(View.VISIBLE);
+		is_started = true;
+		mVibrator.vibrate(VIBR_MILLIS_SHORT);
+		btn_start.setText (R.string.continue_);
+		text_timer.setText (null);
+		etRelax.clearFocus();
+		etRepeats.clearFocus();
+		etWeight.clearFocus();
+		
 		if(relax_time == 0) {
 			onClick( btn_start );
 			return;
@@ -418,32 +429,40 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		{
 		case R.id.button_Start:
 			if( !is_started ) {
-				text_timer.setVisibility(View.VISIBLE);
-				is_started = true;
-				mVibrator.vibrate(VIBR_MILLIS_SHORT);
-				btn_start.setText ("Продолжить");
-				text_timer.setText ("");
-				etRelax.clearFocus();
-				etRepeats.clearFocus();
-				etWeight.clearFocus();
+				if(!checkEnteredData()) {
+					Toast.makeText(this, R.string.check_entered_data, Toast.LENGTH_SHORT).show();
+					return;
+				}
 				startTimer();
 				addExercise(ExerciseActivity.this);
 			}
 			else {
-				text_timer.setVisibility(View.GONE);
-				is_started = false;
-				btn_start.setText (R.string.add);
-				text_timer.setText ("");
+				cancelTimer();
 				updateExercise(ExerciseActivity.this);
-				if(timer != null)
-					timer.cancel ();
-				if(mWakeLock.isHeld())
-					mWakeLock.release();
 			}
 			break;
 		default:
 			return;
 		}
+	}
+	
+	private boolean checkEnteredData() {
+		boolean isValidData = false;
+		if(etRelax!=null && etRepeats!=null && etWeight!=null)
+			isValidData = (etRelax.length()!=0 && etRepeats.length()!=0 && etWeight.length()!=0) ? true : false;
+		return isValidData;
+	}
+	
+	// -------------------------------------------------------------------------
+	private void cancelTimer() {
+		text_timer.setVisibility(View.GONE);
+		is_started = false;
+		btn_start.setText (R.string.add);
+		text_timer.setText ("");
+		if(timer != null)
+			timer.cancel ();
+		if(mWakeLock.isHeld())
+			mWakeLock.release();
 	}
 
 	// -------------------------------------------------------------------------
@@ -458,7 +477,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	}
 	
 	// -------------------------------------------------------------------------
-	public void addExercise( Context context )
+	private void addExercise( Context context )
 	{
 		ContentValues cv = new ContentValues ();
 		Long cur_date_time = Long.valueOf ( System.currentTimeMillis () );
@@ -471,11 +490,11 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		else {
 			cur_approach = last_count_approach + 1;
 			cur_training = last_count_training;
-		}		
-		cv.put(Data.DATE, cur_date_time);
-		cv.put ( Data.WEIGHT, (Float)data.getWeight() );
-		cv.put ( Data.REPEATS, (Integer)data.getRepeats() );
-		cv.put ( Data.RELAX_TIME, (Long)data.getTime() );
+		}
+		cv.put( Data.DATE, cur_date_time );
+		cv.put ( Data.WEIGHT, (Float)data.weight() );
+		cv.put ( Data.REPEATS, (Integer)data.repeats() );
+		cv.put ( Data.RELAX_TIME, (Long)data.relax() );
 		cv.put( Data.LABEL_ID, mLabelRowId );
 		cv.put( Data.COUNT_APPROACH, cur_approach);
 		cv.put( Data.COUNT_TRAINING, cur_training);
@@ -488,33 +507,104 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	}
 	
 	// -------------------------------------------------------------------------
-	public void removeExercise( Context context, long id ) {
+	private void removeExercise( Context context, Uri delUri ) {
 		ContentResolver cr = context.getContentResolver ();
-		Uri uri = Data.CONTENT_URI;
-		Uri delUri = uri.buildUpon().appendPath(Long.toString (id)).build();
-		Log.d ( TAG, "Del URI: " + delUri );
-		int number = cr.delete ( delUri, null, null );
-		Log.d ( TAG, "Deleted number: " + number );
+		int trainingToUpdate = getCountTraining(cr, delUri);
+		boolean isDeleted = cr.delete (delUri, null, null) > 0 ? true : false;
+		if(isDeleted) {
+			if(delUri.equals(lastInsertedUri))
+				lastInsertedUri = null;
+			else
+				updateAfterDelete(cr, delUri, trainingToUpdate);
+		}
 		mLoaderManager.restartLoader(ID_LOADER, null, this);
 	}
 	
 	// -------------------------------------------------------------------------
-	public void removeExercise( Context context, Uri delUri ) {
-		ContentResolver cr = context.getContentResolver ();
-		Log.d ( TAG, "Del URI: " + delUri );
-		int number = cr.delete ( delUri, null, null );
-		Log.d ( TAG, "Deleted number: " + number );
-		mLoaderManager.restartLoader(ID_LOADER, null, this);
-	}
-	
-	// -------------------------------------------------------------------------
-	public void updateExercise( Context context ) {
+	private void updateExercise(Context context) {
+		if(lastInsertedUri == null) 
+			return;
 		ContentValues cv = new ContentValues ();
-		cv.put ( Data.RELAX_TIME, (Long)data.getTime() );
+		cv.put ( Data.RELAX_TIME, data.relax() );
 		ContentResolver cr = context.getContentResolver ();
 		int num_row = cr.update(lastInsertedUri, cv, null, null);
 		Log.d ( TAG, "Updated rows " + num_row );
 		mLoaderManager.restartLoader(ID_LOADER, null, this);
+	}
+	
+	// -------------------------------------------------------------------------
+	private int getCountTraining (ContentResolver cr, Uri uri) {
+		String[] proj = new String[]{Data.COUNT_TRAINING};
+		Cursor c = cr.query(uri, proj, null, null, null);
+		int count_training = 0;
+		if(c!=null && c.moveToFirst()) {
+			count_training = c.getInt(c.getColumnIndex(Data.COUNT_TRAINING));
+			c.close();
+			c = null;
+		}
+		return count_training;
+	}
+	
+	// -------------------------------------------------------------------------
+	private void updateAfterDelete(ContentResolver cr, Uri delUri, int trainingToUpdate ) {
+		Cursor c = null;
+		String[] proj = new String[]{Data._ID, Data.COUNT_APPROACH};
+		String selection = Data.COUNT_TRAINING + "=?" + " AND " + Data.LABEL_ID + "=?";
+		String []selArgs = new String []{String.valueOf(trainingToUpdate), String.valueOf(mLabelRowId) };
+		String sortOrder = Data.COUNT_APPROACH + " ASC";
+		c = cr.query(Data.CONTENT_URI, proj, selection, selArgs, sortOrder);
+		if(c!=null) {
+			boolean needToUpdateTraining = (c.getCount() == 0) ? true : false;
+			if(needToUpdateTraining)
+				updateCountTraining(cr, trainingToUpdate);
+			else {
+				c.moveToFirst();
+				int cur_approach = 0;
+				do {
+					int read_approach = c.getInt(c.getColumnIndex(Data.COUNT_APPROACH));
+					int id = c.getInt(c.getColumnIndex(Data._ID));
+					boolean needToUpdate = (++cur_approach == read_approach) ? false : true;
+					if(needToUpdate) {
+						ContentValues values = new ContentValues();
+						values.put(Data.COUNT_APPROACH, cur_approach);
+						cr.update(Data.buildDataUriWithId(id), values, null, null);
+					}
+				} while(c.moveToNext());
+				c.close();
+				c = null;
+			}
+		}
+	}
+	
+	// -------------------------------------------------------------------------
+	private void updateCountTraining(ContentResolver cr, int trainingToUpdate) {
+		String[] proj = new String[]{Data._ID, Data.COUNT_TRAINING};
+		String selection = Data.LABEL_ID + "=?";
+		String[] selArgs = new String []{String.valueOf(mLabelRowId) };
+		String sortOrder = Data.COUNT_TRAINING + " ASC";
+		Cursor c = cr.query(Data.CONTENT_URI, proj, selection, selArgs, sortOrder);
+		if(c!=null && c.moveToLast()) {
+			int read_training = c.getInt(c.getColumnIndex(Data.COUNT_TRAINING));
+			boolean isLastTraining = (read_training==trainingToUpdate) ? true : false;
+			if(!isLastTraining) {
+				c.moveToFirst();
+				int cur_training = 0;
+				int id = 0;
+				do {
+					read_training = c.getInt(c.getColumnIndex(Data.COUNT_TRAINING));
+					id = c.getInt(c.getColumnIndex(Data._ID));
+					boolean needToUpdate = (++cur_training == read_training) ? false : true;
+					if(needToUpdate) {
+						ContentValues values = new ContentValues();
+						values.put(Data.COUNT_TRAINING, cur_training);
+						cr.update(Data.buildDataUriWithId(id), values, null, null);
+					}
+				} while(c.moveToNext());
+
+			}
+			c.close();
+			c = null;
+		}
 	}
 	
 	// -------------------------------------------------------------------------
@@ -615,18 +705,19 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		public void bindView(View v, Context context, Cursor c) {
 			ViewHolder holder = (ViewHolder) v.getTag();
 			int pos_cur = c.getPosition();
-			long time_prev_ms = 0;
+			int training_prev = 0;
 			int pos_prev = pos_cur-1;
 			if(pos_prev >= 0) {
 				c.moveToPosition(pos_prev);
-				time_prev_ms = c.getLong(c.getColumnIndexOrThrow(Data.DATE));
+				training_prev = c.getInt(c.getColumnIndexOrThrow(Data.COUNT_TRAINING));
 			}
 			c.moveToPosition(pos_cur);
 			long time_cur_ms = c.getLong(c.getColumnIndexOrThrow(Data.DATE));
+			int training_cur = c.getInt(c.getColumnIndexOrThrow(Data.COUNT_TRAINING));
 
 			CharSequence dt = null;
 			if(holder.tvHeader != null) {
-				if( (time_cur_ms-time_prev_ms)>= MILLIS_OF_TWO_HOURS ) {
+				if( training_cur != training_prev ) {
 					dt = DateFormat.format(DATE_FORMAT, time_cur_ms);
 					int count_training = c.getInt(c.getColumnIndexOrThrow(Data.COUNT_TRAINING));
 					holder.tvHeader.setText("["+String.valueOf(count_training)+"] "+dt);
@@ -659,49 +750,159 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	}
 	
 	// -------------------------------------------------------------------------
-	private class ExerciseData {
-		private int repeats;
-		private long time;
-		private float weight;
+	public static class ExerciseDataChangeDialog extends DialogFragment implements OnClickListener, LoaderCallbacks<Cursor>, OnFocusChangeListener {
+		// constants
+		private static final String ID_DATA_TO_CHANGE = "id";
+		private static final int ID_LOADER_CHANGE = 10;
+		private static final String TAG = "ExerciseDataChangeDialog";
+		// Views
+		private View mView;
+		private EditText etWeight;
+		private EditText etRepeats;
+		private EditText etRelax;
+		private Button btnChange;
+		private Uri mUri = null;
+		ExerciseData loadedData, changedData;
 		
-		public ExerciseData(float weight, int repeats, long time){
-			this.weight = weight;
-			this.repeats = repeats;
-			this.time = time;
+		public ExerciseDataChangeDialog() {
+			
 		}
 		
-		public ExerciseData(ExerciseData data) {
-			this(data.getWeight(), data.getRepeats(), data.getTime());
+		public static ExerciseDataChangeDialog newInstance(long id) {
+			ExerciseDataChangeDialog dlg = new ExerciseDataChangeDialog();
+			Bundle args = new Bundle();
+			args.putLong(ID_DATA_TO_CHANGE, id);
+			dlg.setArguments(args);
+			return dlg;
 		}
 		
-		public ExerciseData() {
-			this.weight = 0;
-			this.repeats = 0;
-			this.time = 0;
+		@Override
+		public View onCreateView(LayoutInflater inflater, ViewGroup container,
+				Bundle savedInstanceState) {
+			getDialog().setTitle(R.string.change_question);
+			mView = inflater.inflate(R.layout.exercise_data_dialog, container, false);
+			etWeight = (EditText)mView.findViewById(R.id.etWeight);
+			etWeight.setOnFocusChangeListener(this);
+			etWeight.setSelectAllOnFocus(true);
+			etRepeats = (EditText)mView.findViewById(R.id.etRepeats);
+			etRepeats.setOnFocusChangeListener(this);
+			etRepeats.setSelectAllOnFocus(true);
+			etRelax = (EditText)mView.findViewById(R.id.etRelax);
+			etRelax.setOnFocusChangeListener(this);
+			etRelax.setSelectAllOnFocus(true);
+			btnChange = (Button)mView.findViewById(R.id.btnChange);
+			btnChange.setOnClickListener(this);
+			return mView;
 		}
 		
-		public void setWeight(float weight) {
-			this.weight = weight;
+		@Override
+		public void onCreate(Bundle savedInstanceState) {
+			super.onCreate(savedInstanceState);
+			getLoaderManager().restartLoader(ID_LOADER_CHANGE, getArguments(), this);
+		}
+
+		@Override
+		public void onClick(View v) {
+			Utils.hideKeyboard(getActivity(), v);
+			switch(v.getId()) {
+			case R.id.btnChange:
+				updateData(getActivity());
+				break;
+			}
+			dismiss();
 		}
 		
-		public float getWeight() {
-			return this.weight;
+		private void updateData(Context context) {
+			if(!checkEnteredData()) {
+				Toast.makeText(getActivity(), R.string.check_entered_data, Toast.LENGTH_SHORT).show();
+				return;
+			}
+			if(!isNeedToUpdate())
+				return;
+			ContentResolver cr = context.getContentResolver();
+			ContentValues cv = new ContentValues();
+			cv.put(Data.WEIGHT, Float.valueOf(changedData.weight()));
+			cv.put(Data.REPEATS, Integer.valueOf(changedData.repeats()));
+			cv.put(Data.RELAX_TIME, Long.valueOf(changedData.relax()));
+			if(cr.update(mUri, cv, null, null) > 0) {
+				mLoaderManager.restartLoader(ID_LOADER, null, (ExerciseActivity)getActivity());
+				Toast.makeText(getActivity(), R.string.data_successfully_updated, Toast.LENGTH_SHORT).show();
+			}
 		}
 		
-		public void setRepeats(int repeats) {
-			this.repeats = repeats;
+		private boolean checkEnteredData() {
+			boolean isChecked = (etWeight.length() !=0 && etRepeats.length()!=0 && etRelax.length()!=0) ? true : false;
+			return isChecked;
 		}
 		
-		public int getRepeats() {
-			return this.repeats;
+		private boolean isNeedToUpdate() {
+			float weight = Float.valueOf(etWeight.getText().toString());
+			int repeats = Integer.valueOf(etRepeats.getText().toString());
+			long relax = Long.valueOf(etRelax.getText().toString());
+			changedData = new ExerciseData( weight, repeats, relax);
+			return !changedData.equals(loadedData);
+		}
+
+		@Override
+		public Loader<Cursor> onCreateLoader(int id_loader, Bundle bundle) {
+			if(bundle==null)
+				return null;
+			if(id_loader!=ID_LOADER_CHANGE) 
+				return null;
+			long id_data = 0;
+			id_data = bundle.getLong(ID_DATA_TO_CHANGE);
+			mUri = Data.buildDataUriWithId(id_data);
+			String [] projection = {Data.WEIGHT, Data.REPEATS, Data.RELAX_TIME};
+			return new CursorLoader(getActivity(), mUri, projection, null, null, null);
+		}
+
+		@Override
+		public void onLoadFinished(Loader<Cursor> loader, Cursor c) {
+			if(loader!=null && c!=null) {
+				if(c.moveToFirst()) {
+					loadedData = new ExerciseData(c.getFloat(c.getColumnIndex(Data.WEIGHT)),
+							c.getInt(c.getColumnIndex(Data.REPEATS)),
+							c.getLong(c.getColumnIndex(Data.RELAX_TIME)));
+					etWeight.setText(String.valueOf(loadedData.weight()));
+					etRepeats.setText(String.valueOf(loadedData.repeats()));
+					etRelax.setText(String.valueOf(loadedData.relax()));
+				}
+			}
 		}
 		
-		public void setRelax(long time) {
-			this.time = time;
+		@Override
+		public void onLoaderReset(Loader<Cursor> loader) {
 		}
 		
-		public long getTime() {
-			return this.time;
+		@Override
+		public void onDestroyView() {
+			Log.d(TAG, "OnDestroyView dialog");
+			mView = null;
+			super.onDestroyView();
+		}
+		
+		@Override
+		public void onDestroy() {
+			Log.d(TAG, "OnDestroy dialog");
+			getLoaderManager().destroyLoader(ID_LOADER_CHANGE);
+			super.onDestroy();
+		}
+
+		@Override
+		public void onFocusChange(View v, boolean hasFocus) {
+			switch(v.getId()) {
+			case R.id.etWeight:
+				etWeight.setSelection(0, etWeight.length());
+				break;
+			case R.id.etRepeats:
+				etRepeats.setSelection(0, etRepeats.length());
+				break;	
+			case R.id.etRelax:
+				etRelax.setSelection(0, etRelax.length());
+				break;
+			default:
+				return;
+			}
 		}
 	}
 }

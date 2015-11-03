@@ -11,6 +11,8 @@
     <string name="message">Упражнение</string>
     <string name="enter_time">Введите длительность упражнения</string>
     <string name="delete">Удалить</string>
+    <string name="change">Изменить</string>
+    <string name="cancel">Отмена</string>
     <string name="clear_history">Очистить историю</string>
     <string name="delete_record">Удалить запись</string>
     <string name="relax_time">Отдых (c)</string>
@@ -18,7 +20,10 @@
 	<string name="weight">Вес</string>
 	<string name="time">Время</string>
 	<string name="approach_number">№</string>
-	<string name="exit_question">Выйти из приложения?</string>
+	<string name="exit_question">Хотите выйти?</string>
+	<string name="change_question">Изменить?</string>
+	<string name="data_successfully_updated">"Данные успешно обновлены"</string>
 	<string name="yes">Да</string>
 	<string name="no">Нет</string>
+	<string name="check_entered_data">Проверьте правильность ввода данных</string>
 </resources>
