@@ -18,75 +18,75 @@ import android.os.Vibrator;
 import android.support.v4.app.DialogFragment;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentActivity;
+import android.support.v4.app.FragmentManager;
+import android.support.v4.app.FragmentStatePagerAdapter;
 import android.support.v4.app.FragmentTransaction;
 import android.support.v4.app.LoaderManager;
 import android.support.v4.app.LoaderManager.LoaderCallbacks;
 import android.support.v4.content.CursorLoader;
 import android.support.v4.content.Loader;
-import android.support.v4.widget.CursorAdapter;
+import android.support.v4.view.PagerTabStrip;
+import android.support.v4.view.ViewPager;
 import android.text.Editable;
-import android.text.format.DateFormat;
 import android.util.Log;
-import android.view.ContextMenu;
-import android.view.ContextMenu.ContextMenuInfo;
 import android.view.LayoutInflater;
-import android.view.MenuItem;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.View.OnFocusChangeListener;
 import android.view.ViewGroup;
-import android.view.inputmethod.InputMethodManager;
-import android.widget.AdapterView;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.ListView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import com.tuoved.app.R;
 import com.tuoved.app.provider.ProviderMetaData.Data;
 import com.tuoved.app.provider.ProviderMetaData.Labels;
+import com.tuoved.app.ui.ExerciseListFragment.OnExerciseContextMenuListener;
 import com.tuoved.app.utils.EditTextExtended;
 import com.tuoved.app.utils.ExerciseData;
 import com.tuoved.app.utils.TextWatcherExtended;
 import com.tuoved.app.utils.Utils;
 
-public class ExerciseActivity extends FragmentActivity implements OnClickListener, LoaderCallbacks<Cursor>, OnFocusChangeListener 
-{
-	protected static final String TAG = "ExerciseActivity";
-	
-	private static MyAdapter mAdapter;
+public class ExerciseActivity extends FragmentActivity implements 
+OnClickListener, LoaderCallbacks<Cursor>, OnFocusChangeListener, OnExerciseContextMenuListener {
+	private static final String TAG = "ExerciseActivity";
+	private static final String TAG_DIALOG = "dialog";
+
+	private static ExercisePagerAdapter mPagerAdapter;
 	private static LoaderManager mLoaderManager;
 	private static Ringtone mRingtone;
 	private static RingtoneManager mRingtonManager;
 	private static Vibrator mVibrator;
 	private static PowerManager mPowerManager;
 	private static PowerManager.WakeLock mWakeLock;
-	
+
 	private static final String SETTINGS_FILE = "settings";
 	private static final String IS_STARTED = "is_started";
-	private static final int ACTION_DELETE = 1;
-	private static final int ACTION_CHANGE = 0;
-	private final long MILLIS_OF_TWO_HOURS = 2*60*60*1000;
+	private static final long MILLIS_OF_TWO_HOURS = 2*60*60*1000;
 	private static final int ID_LOADER = 0;
 	private static final long VIBR_MILLIS_SHORT = 20;
-	private static long mLabelRowId = 0;
+	private static long mLabelId = 0;
 	private static String mTitle;
 	private static Button btn_start;
 	private static TextView text_timer;
-	private static ListView mListView;
 	private static boolean is_started = false;
 	private static CountDownTimer timer;
+	private static ViewPager mPager;
+	private static PagerTabStrip mPagerTabStrip;
+	private static LinearLayout mLayoutHeader;
 	
+
 	private EditTextExtended etRelax, etRepeats, etWeight;
 	private ExerciseData temp_data = new ExerciseData();
 	private ExerciseData data;
 	private int last_count_approach;
-	private int last_count_training;
+	private static int last_count_training;
 	private long last_date;
-	private Uri lastInsertedUri;
+	private static Uri lastInsertedUri;
 	private SharedPreferences settings;
-	
+
 
 	// --------------------------------------------------------------------------------------------
 	@Override
@@ -109,66 +109,24 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		if( mRingtonManager.getCursor().getCount() != 0 )
 			mRingtone = mRingtonManager.getRingtone( 0 );
 		mVibrator = (Vibrator)getSystemService(VIBRATOR_SERVICE);
-		
+
 		if(savedInstanceState != null) {
 			is_started = savedInstanceState.getBoolean(IS_STARTED);
 			int resId = is_started ? R.string.continue_ : R.string.add;
 			btn_start.setText(resId);
 		}
-		
-	}
-	
-	// --------------------------------------------------------------------------------------------
-	@Override
-	public void onCreateContextMenu(ContextMenu menu, View v,
-			ContextMenuInfo menuInfo) {
-		menu.add(0, ACTION_CHANGE, 0, R.string.change);
-		menu.add(0, ACTION_DELETE, 0, R.string.delete);
-		super.onCreateContextMenu(menu, v, menuInfo);
-	}
-	
-	// --------------------------------------------------------------------------------------------
-	@Override
-	public boolean onContextItemSelected(MenuItem item) {
-		AdapterView.AdapterContextMenuInfo info = (AdapterView.AdapterContextMenuInfo)item.getMenuInfo();
-		switch(item.getItemId()) {
-		case ACTION_CHANGE: {
-			final String tag = "dialog";
-			FragmentTransaction ft = getSupportFragmentManager().beginTransaction();
-		    Fragment prev = getSupportFragmentManager().findFragmentByTag(tag);
-		    if (prev != null) {
-		        ft.remove(prev);
-		    }
-		    ft.addToBackStack(null);
 
-		    DialogFragment newFragment = ExerciseDataChangeDialog.newInstance(info.id);
-		    newFragment.show(ft, tag);
-			break;
-		}
-		case ACTION_DELETE:	{
-			Uri delUri = Data.buildDataUriWithId(info.id);
-			boolean isLastInsertedUri = delUri.equals(lastInsertedUri);
-			if(is_started && isLastInsertedUri)
-				cancelTimer();
-			removeExercise(this, delUri);
-			break;
-		}
-		default:
-			break;
-		}
-		return super.onContextItemSelected(item);
 	}
-	
 	// --------------------------------------------------------------------------------------------
 	@Override
-		protected void onDestroy() {
+	protected void onDestroy() {
 		Log.d(TAG, "onDestroy");
 		if(timer!=null)
 			timer.cancel();
 		mLoaderManager.destroyLoader(ID_LOADER);
 		super.onDestroy();
-		}
-	
+	}
+
 	// --------------------------------------------------------------------------------------------
 	@Override
 	public void onBackPressed() {
@@ -180,14 +138,14 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		else
 			super.onBackPressed();
 	}
-	
+
 	//--------------------------------------------------------------------------
 	@Override
 	protected void onSaveInstanceState(Bundle outState) {
 		outState.putBoolean(IS_STARTED, is_started );
 		super.onSaveInstanceState(outState);
 	}
-	
+
 	//--------------------------------------------------------------------------
 	private void getViewFromId() {
 		// Initialization layout variables
@@ -197,11 +155,9 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		etWeight = (EditTextExtended) findViewById ( R.id.etWeight );
 		text_timer = (TextView) findViewById ( R.id.timerView );
 		text_timer.setVisibility(View.GONE);
-		mListView = (ListView) findViewById(R.id.list_data);
-		if(mListView!=null)
-			registerForContextMenu(mListView);
-		
-		
+		mPager = (ViewPager)findViewById(R.id.pager);
+		mPagerTabStrip = (PagerTabStrip)findViewById(R.id.pagerTabStrip);
+		mLayoutHeader = (LinearLayout)findViewById(R.id.layout_header);
 	}
 	//--------------------------------------------------------------------------
 	private void setLabel(Intent intent){
@@ -209,8 +165,8 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 			this.setTitle ( mTitle );
 			return;
 		}
-		mLabelRowId = intent.getLongExtra( MainActivity.EXTRA_ID_EXERCISE, 0 );
-		String pathSegment = String.valueOf(mLabelRowId);
+		mLabelId = intent.getLongExtra( MainActivity.EXTRA_ID_EXERCISE, 0 );
+		String pathSegment = String.valueOf(mLabelId);
 		final Uri uri = Labels.CONTENT_URI.buildUpon().appendPath(pathSegment).build();
 		Cursor cursor = getContentResolver().query(uri, null, null, null, null);
 		if(cursor != null && cursor.moveToFirst()) {
@@ -222,7 +178,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 			mTitle = "Exercises";
 		this.setTitle ( mTitle );
 	}
-	
+
 	//--------------------------------------------------------------------------
 	private void loadSettings() {
 		settings = getSharedPreferences (SETTINGS_FILE, MODE_PRIVATE);
@@ -233,15 +189,13 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		temp_data.setWeight(settings.getFloat ("Weight", 15));
 		etWeight.setText ( Float.toString ( temp_data.weight()));
 	}
-	
+
 	//--------------------------------------------------------------------------
 	private void fillData() {
 		mLoaderManager = getSupportLoaderManager();
 		mLoaderManager.initLoader(ID_LOADER, null, this);
-		mAdapter = new MyAdapter(this, R.layout.row_item, null);
-		mListView.setAdapter(mAdapter);
 	}
-	
+
 	//--------------------------------------------------------------------------
 	private void registerListeners() {
 		btn_start.setOnClickListener (this);
@@ -304,14 +258,14 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 				return;
 			}
 		}
-		
+
 		@Override
 		public void afterTextChanged(View v, Editable s) {}
 		@Override
 		public void beforeTextChanged(View v, CharSequence s, int start, int count,
-			int after) {}
+				int after) {}
 	};
-	
+
 	// -------------------------------------------------------------------------
 	void savePreferences(String key, int value) {
 		SharedPreferences settings = getSharedPreferences (
@@ -320,7 +274,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		setEditor.putInt ( key, value );
 		setEditor.commit();
 	}
-	
+
 	// -------------------------------------------------------------------------
 	void savePreferences(String key, float value) {
 		SharedPreferences settings = getSharedPreferences (
@@ -329,7 +283,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		setEditor.putFloat( key, value );
 		setEditor.commit();
 	}
-	
+
 	// -------------------------------------------------------------------------
 	void savePreferences(String key, long value) {
 		SharedPreferences settings = getSharedPreferences (
@@ -338,7 +292,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		setEditor.putLong( key, value );
 		setEditor.commit();
 	}
-	
+
 	// -------------------------------------------------------------------------
 	public void onFocusChange(View v, boolean hasFocus) {
 		switch( v.getId() )
@@ -352,20 +306,17 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		case R.id.etRelax:
 			etRelax.setSelection(0, etRelax.getText().length());
 			break;
-		case R.id.button_Start:
-			Utils.hideKeyboard(this, v);
-		    break;
 		}
 	}
 
 	// -------------------------------------------------------------------------
 	private void startTimer() {
-		
+
 		final long relax_time = temp_data.relax();
 		final int procOfTime = (int)(0.1 * (double)relax_time);
 		final int redColor = getResources().getColor(R.color.red );
 		final int greenColor = getResources().getColor(R.color.green);
-		
+
 		text_timer.setVisibility(View.VISIBLE);
 		is_started = true;
 		mVibrator.vibrate(VIBR_MILLIS_SHORT);
@@ -374,11 +325,12 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		etRelax.clearFocus();
 		etRepeats.clearFocus();
 		etWeight.clearFocus();
-		
+
 		if(relax_time == 0) {
 			onClick( btn_start );
 			return;
 		}
+		setPagerCurrentPage(0);
 		mWakeLock.acquire();
 		data = new ExerciseData(temp_data);
 		data.setRelax(0);
@@ -424,7 +376,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 	@Override
 	public void onClick(View v)
 	{
-		onFocusChange(v, true);
+		Utils.hideKeyboard(this, v);
 		switch (v.getId ())
 		{
 		case R.id.button_Start:
@@ -445,14 +397,14 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 			return;
 		}
 	}
-	
+
 	private boolean checkEnteredData() {
 		boolean isValidData = false;
 		if(etRelax!=null && etRepeats!=null && etWeight!=null)
 			isValidData = (etRelax.length()!=0 && etRepeats.length()!=0 && etWeight.length()!=0) ? true : false;
 		return isValidData;
 	}
-	
+
 	// -------------------------------------------------------------------------
 	private void cancelTimer() {
 		text_timer.setVisibility(View.GONE);
@@ -475,7 +427,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 			getActionBar ().setDisplayHomeAsUpEnabled ( true );
 		}
 	}
-	
+
 	// -------------------------------------------------------------------------
 	private void addExercise( Context context )
 	{
@@ -495,7 +447,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		cv.put ( Data.WEIGHT, (Float)data.weight() );
 		cv.put ( Data.REPEATS, (Integer)data.repeats() );
 		cv.put ( Data.RELAX_TIME, (Long)data.relax() );
-		cv.put( Data.LABEL_ID, mLabelRowId );
+		cv.put( Data.LABEL_ID, mLabelId );
 		cv.put( Data.COUNT_APPROACH, cur_approach);
 		cv.put( Data.COUNT_TRAINING, cur_training);
 		ContentResolver cr = context.getContentResolver ();
@@ -505,7 +457,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		Log.d ( TAG, "Inserted URI: " + lastInsertedUri );
 		mLoaderManager.restartLoader(ID_LOADER, null, this);
 	}
-	
+
 	// -------------------------------------------------------------------------
 	private void removeExercise( Context context, Uri delUri ) {
 		ContentResolver cr = context.getContentResolver ();
@@ -519,7 +471,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		}
 		mLoaderManager.restartLoader(ID_LOADER, null, this);
 	}
-	
+
 	// -------------------------------------------------------------------------
 	private void updateExercise(Context context) {
 		if(lastInsertedUri == null) 
@@ -531,9 +483,9 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		Log.d ( TAG, "Updated rows " + num_row );
 		mLoaderManager.restartLoader(ID_LOADER, null, this);
 	}
-	
+
 	// -------------------------------------------------------------------------
-	private int getCountTraining (ContentResolver cr, Uri uri) {
+	private static int getCountTraining (ContentResolver cr, Uri uri) {
 		String[] proj = new String[]{Data.COUNT_TRAINING};
 		Cursor c = cr.query(uri, proj, null, null, null);
 		int count_training = 0;
@@ -544,13 +496,13 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		}
 		return count_training;
 	}
-	
+
 	// -------------------------------------------------------------------------
-	private void updateAfterDelete(ContentResolver cr, Uri delUri, int trainingToUpdate ) {
+	private static void updateAfterDelete(ContentResolver cr, Uri delUri, int trainingToUpdate ) {
 		Cursor c = null;
 		String[] proj = new String[]{Data._ID, Data.COUNT_APPROACH};
 		String selection = Data.COUNT_TRAINING + "=?" + " AND " + Data.LABEL_ID + "=?";
-		String []selArgs = new String []{String.valueOf(trainingToUpdate), String.valueOf(mLabelRowId) };
+		String []selArgs = new String []{String.valueOf(trainingToUpdate), String.valueOf(mLabelId) };
 		String sortOrder = Data.COUNT_APPROACH + " ASC";
 		c = cr.query(Data.CONTENT_URI, proj, selection, selArgs, sortOrder);
 		if(c!=null) {
@@ -575,12 +527,12 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 			}
 		}
 	}
-	
+
 	// -------------------------------------------------------------------------
-	private void updateCountTraining(ContentResolver cr, int trainingToUpdate) {
-		String[] proj = new String[]{Data._ID, Data.COUNT_TRAINING};
+	private static void updateCountTraining(ContentResolver cr, int trainingToUpdate) {
+		String[] proj = new String[]{Data._ID, Data.COUNT_TRAINING, Data.DATE};
 		String selection = Data.LABEL_ID + "=?";
-		String[] selArgs = new String []{String.valueOf(mLabelRowId) };
+		String[] selArgs = new String []{String.valueOf(mLabelId) };
 		String sortOrder = Data.COUNT_TRAINING + " ASC";
 		Cursor c = cr.query(Data.CONTENT_URI, proj, selection, selArgs, sortOrder);
 		if(c!=null && c.moveToLast()) {
@@ -588,36 +540,38 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 			boolean isLastTraining = (read_training==trainingToUpdate) ? true : false;
 			if(!isLastTraining) {
 				c.moveToFirst();
-				int cur_training = 0;
+				int cur_training = 1;
 				int id = 0;
+				long prev_date = 0;
 				do {
 					read_training = c.getInt(c.getColumnIndex(Data.COUNT_TRAINING));
 					id = c.getInt(c.getColumnIndex(Data._ID));
-					boolean needToUpdate = (++cur_training == read_training) ? false : true;
+					long cur_date = c.getLong(c.getColumnIndex(Data.DATE));
+					if((prev_date-cur_date) >= MILLIS_OF_TWO_HOURS)
+						++cur_training;
+					boolean needToUpdate = (cur_training != read_training) ? true : false;
 					if(needToUpdate) {
 						ContentValues values = new ContentValues();
 						values.put(Data.COUNT_TRAINING, cur_training);
 						cr.update(Data.buildDataUriWithId(id), values, null, null);
 					}
+					prev_date = cur_date;
 				} while(c.moveToNext());
-
 			}
 			c.close();
 			c = null;
 		}
 	}
-	
+
 	// -------------------------------------------------------------------------
 	@Override
 	public Loader<Cursor> onCreateLoader(int loader,
 			Bundle args) {
-		Uri uri = null;
-		String[] projection = null;
-		uri = Labels.CONTENT_URI.buildUpon()
-				.appendPath(String.valueOf(mLabelRowId))
+		Uri uri = Labels.CONTENT_URI.buildUpon()
+				.appendPath(String.valueOf(mLabelId))
 				.appendPath(Data.TABLE_NAME)
 				.build();
-		projection = new String[] {
+		String[] projection = new String[] {
 				Labels.TABLE_NAME + "." + Labels._ID,
 				Labels.NAME,
 				Data.TABLE_NAME + "." + Data._ID,
@@ -631,25 +585,10 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		};
 		return new CursorLoader(getApplicationContext(), uri, projection, null, null, null);
 	}
-	
+
 	// -------------------------------------------------------------------------
 	@Override
-	public void onLoadFinished(Loader<Cursor> loader,
-			Cursor data) {
-		mAdapter.swapCursor(data);
-		if(data == null)
-			return;
-		final int pos = data.getCount()-1;
-		mListView.post(new Runnable() {
-		    @Override
-		    public void run() {
-		    	mListView.setSelection(pos);
-		        View v = mListView.getChildAt(pos);
-		        if (v != null) {
-		            v.requestFocus();
-		        }
-		    }
-		});
+	public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
 		if(data.moveToLast()) {
 			last_count_approach = data.getInt(data.getColumnIndexOrThrow(Data.COUNT_APPROACH));
 			last_count_training = data.getInt(data.getColumnIndexOrThrow(Data.COUNT_TRAINING));
@@ -660,95 +599,55 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 			last_count_training = 1;
 			last_date = System.currentTimeMillis();
 		}
+		boolean isEmpty = data.getCount() == 0;
+		mPagerTabStrip.setVisibility(isEmpty ? View.GONE : View.VISIBLE);
+		mLayoutHeader.setVisibility(isEmpty ? View.GONE : View.VISIBLE);
+		int prevPos = mPager.getCurrentItem();
+		mPagerAdapter = new ExercisePagerAdapter(getSupportFragmentManager(), last_count_training);
+		mPager.setAdapter(mPagerAdapter);
+		setPagerCurrentPage(prevPos);
 	}
+	
 	// -------------------------------------------------------------------------
 	@Override
 	public void onLoaderReset(Loader<Cursor> loader) {
-		mAdapter.swapCursor(null);
-	}
-	
-	private class ViewHolder{
-		TextView tvHeader;
-		TextView tvTime;
-		TextView tvWeight;
-		TextView tvRepeats;
-		TextView tvRelax;
 	}
 	
 	// -------------------------------------------------------------------------
-	private class MyAdapter extends CursorAdapter {
-		private final CharSequence DATE_FORMAT = "dd-MM-yy (EEE) kk:mm";
+	@Override
+	public void onChangeData(long id) {
 		
-		private LayoutInflater mInflater;
-		private int mLayout;
-		
-		public MyAdapter(Context context, int layout, Cursor c) {
-			super(context, c, false);
-			mInflater = (LayoutInflater)context.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
-			mLayout = layout;
+		FragmentTransaction ft = getSupportFragmentManager().beginTransaction();
+		Fragment prev = getSupportFragmentManager().findFragmentByTag(TAG_DIALOG);
+		if (prev != null) {
+			ft.remove(prev);
 		}
+		ft.addToBackStack(null);
 
-		@Override
-		public View newView(Context context, Cursor c, ViewGroup parent) {
-			View v = mInflater.inflate(mLayout, parent, false);
-			ViewHolder holder = new ViewHolder();
-			holder.tvHeader = (TextView)v.findViewById(R.id.header);
-			holder.tvTime = (TextView)v.findViewById(R.id.time);
-			holder.tvWeight = (TextView)v.findViewById(R.id.weight);
-			holder.tvRepeats = (TextView)v.findViewById(R.id.repeats);
-			holder.tvRelax = (TextView)v.findViewById(R.id.relax);
-			v.setTag(holder);
-			return v;
-		}
-		
-		@Override
-		public void bindView(View v, Context context, Cursor c) {
-			ViewHolder holder = (ViewHolder) v.getTag();
-			int pos_cur = c.getPosition();
-			int training_prev = 0;
-			int pos_prev = pos_cur-1;
-			if(pos_prev >= 0) {
-				c.moveToPosition(pos_prev);
-				training_prev = c.getInt(c.getColumnIndexOrThrow(Data.COUNT_TRAINING));
-			}
-			c.moveToPosition(pos_cur);
-			long time_cur_ms = c.getLong(c.getColumnIndexOrThrow(Data.DATE));
-			int training_cur = c.getInt(c.getColumnIndexOrThrow(Data.COUNT_TRAINING));
-
-			CharSequence dt = null;
-			if(holder.tvHeader != null) {
-				if( training_cur != training_prev ) {
-					dt = DateFormat.format(DATE_FORMAT, time_cur_ms);
-					int count_training = c.getInt(c.getColumnIndexOrThrow(Data.COUNT_TRAINING));
-					holder.tvHeader.setText("["+String.valueOf(count_training)+"] "+dt);
-					holder.tvHeader.setVisibility(View.VISIBLE);
-				}
-				else {
-					holder.tvHeader.setVisibility(View.GONE);
-				}
-			}
-			
-			int count_approach = c.getInt(c.getColumnIndexOrThrow(Data.COUNT_APPROACH));
-			if(holder.tvTime != null) {
-				holder.tvTime.setText(String.valueOf(count_approach));
-			}
-			
-			String weight = c.getString(c.getColumnIndexOrThrow(Data.WEIGHT));
-			if(holder.tvWeight != null)
-				holder.tvWeight.setText(weight);
-			
-			String repeats = c.getString(c.getColumnIndexOrThrow(Data.REPEATS));
-			if(holder.tvRepeats != null)
-				holder.tvRepeats.setText(repeats);
-			
-			long time_relax = c.getLong(c.getColumnIndexOrThrow(Data.RELAX_TIME));
-			String relax = time_relax == 0 ? "-" : String.valueOf(time_relax);
-			if(holder.tvRelax != null)
-				holder.tvRelax.setText(relax);
-		}
-		
+		DialogFragment newFragment = ExerciseDataChangeDialog.newInstance(id);
+		newFragment.show(ft, TAG_DIALOG);
 	}
 	
+	// -------------------------------------------------------------------------
+	@Override
+	public void onDeleteData(long id) {
+		Uri delUri = Data.buildDataUriWithId(id);
+		boolean isLastInsertedUri = delUri.equals(lastInsertedUri);
+		if(is_started && isLastInsertedUri)
+			cancelTimer();
+		removeExercise(this, delUri);
+	}
+	
+	// -------------------------------------------------------------------------
+	private void setPagerCurrentPage(final int pos) {
+		mPager.post(new Runnable() {
+			@Override
+			public void run() {
+					mPager.setCurrentItem(pos);
+			}
+		});
+	}
+
 	// -------------------------------------------------------------------------
 	public static class ExerciseDataChangeDialog extends DialogFragment implements OnClickListener, LoaderCallbacks<Cursor>, OnFocusChangeListener {
 		// constants
@@ -763,11 +662,13 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 		private Button btnChange;
 		private Uri mUri = null;
 		ExerciseData loadedData, changedData;
-		
+
+		// -------------------------------------------------------------------------
 		public ExerciseDataChangeDialog() {
-			
+
 		}
-		
+
+		// -------------------------------------------------------------------------
 		public static ExerciseDataChangeDialog newInstance(long id) {
 			ExerciseDataChangeDialog dlg = new ExerciseDataChangeDialog();
 			Bundle args = new Bundle();
@@ -775,7 +676,8 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 			dlg.setArguments(args);
 			return dlg;
 		}
-		
+
+		// -------------------------------------------------------------------------
 		@Override
 		public View onCreateView(LayoutInflater inflater, ViewGroup container,
 				Bundle savedInstanceState) {
@@ -794,13 +696,15 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 			btnChange.setOnClickListener(this);
 			return mView;
 		}
-		
+
+		// -------------------------------------------------------------------------
 		@Override
 		public void onCreate(Bundle savedInstanceState) {
 			super.onCreate(savedInstanceState);
 			getLoaderManager().restartLoader(ID_LOADER_CHANGE, getArguments(), this);
 		}
 
+		// -------------------------------------------------------------------------
 		@Override
 		public void onClick(View v) {
 			Utils.hideKeyboard(getActivity(), v);
@@ -811,7 +715,8 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 			}
 			dismiss();
 		}
-		
+
+		// -------------------------------------------------------------------------
 		private void updateData(Context context) {
 			if(!checkEnteredData()) {
 				Toast.makeText(getActivity(), R.string.check_entered_data, Toast.LENGTH_SHORT).show();
@@ -829,12 +734,14 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 				Toast.makeText(getActivity(), R.string.data_successfully_updated, Toast.LENGTH_SHORT).show();
 			}
 		}
-		
+
+		// -------------------------------------------------------------------------
 		private boolean checkEnteredData() {
 			boolean isChecked = (etWeight.length() !=0 && etRepeats.length()!=0 && etRelax.length()!=0) ? true : false;
 			return isChecked;
 		}
-		
+
+		// -------------------------------------------------------------------------
 		private boolean isNeedToUpdate() {
 			float weight = Float.valueOf(etWeight.getText().toString());
 			int repeats = Integer.valueOf(etRepeats.getText().toString());
@@ -843,6 +750,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 			return !changedData.equals(loadedData);
 		}
 
+		// -------------------------------------------------------------------------
 		@Override
 		public Loader<Cursor> onCreateLoader(int id_loader, Bundle bundle) {
 			if(bundle==null)
@@ -856,6 +764,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 			return new CursorLoader(getActivity(), mUri, projection, null, null, null);
 		}
 
+		// -------------------------------------------------------------------------
 		@Override
 		public void onLoadFinished(Loader<Cursor> loader, Cursor c) {
 			if(loader!=null && c!=null) {
@@ -869,18 +778,20 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 				}
 			}
 		}
-		
+
 		@Override
 		public void onLoaderReset(Loader<Cursor> loader) {
 		}
-		
+
+		// -------------------------------------------------------------------------
 		@Override
 		public void onDestroyView() {
 			Log.d(TAG, "OnDestroyView dialog");
 			mView = null;
 			super.onDestroyView();
 		}
-		
+
+		// -------------------------------------------------------------------------
 		@Override
 		public void onDestroy() {
 			Log.d(TAG, "OnDestroy dialog");
@@ -888,6 +799,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 			super.onDestroy();
 		}
 
+		// -------------------------------------------------------------------------
 		@Override
 		public void onFocusChange(View v, boolean hasFocus) {
 			switch(v.getId()) {
@@ -896,7 +808,7 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 				break;
 			case R.id.etRepeats:
 				etRepeats.setSelection(0, etRepeats.length());
-				break;	
+				break;
 			case R.id.etRelax:
 				etRelax.setSelection(0, etRelax.length());
 				break;
@@ -905,6 +817,33 @@ public class ExerciseActivity extends FragmentActivity implements OnClickListene
 			}
 		}
 	}
+
+	// -------------------------------------------------------------------------
+	public static class ExercisePagerAdapter extends FragmentStatePagerAdapter {
+
+		private int mCount;
+
+		public ExercisePagerAdapter(FragmentManager fm, int page_count) {
+			super(fm);
+			mCount = page_count;
+		}
+
+		@Override
+		public Fragment getItem(int pos) {
+			return ExerciseListFragment.newInstance(pos, last_count_training, mLabelId);
+		}
+
+		@Override
+		public int getCount() {
+			return mCount;
+		}
+		
+		@Override
+		public CharSequence getPageTitle(int pos) {
+			return "  "+(last_count_training-pos)+"  ";
+		}
+		
+	}	
 }
 
 

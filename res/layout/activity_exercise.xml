@@ -124,6 +124,7 @@
     </LinearLayout>
     
     <LinearLayout
+        android:id="@+id/layout_header"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="#333"
@@ -163,10 +164,22 @@
 
 </LinearLayout>
 
-    <ListView
-        android:id="@+id/list_data"
+	<android.support.v4.view.ViewPager
+        android:id="@+id/pager"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"/>
-        
+        android:layout_height="0px"
+        android:layout_weight="1" >
+    	<android.support.v4.view.PagerTabStrip
+            android:id="@+id/pagerTabStrip"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:background="#333"
+            android:paddingLeft="16dp"
+            android:paddingRight="16dp"
+             >
+        </android.support.v4.view.PagerTabStrip>
+
+    </android.support.v4.view.ViewPager>
 
 </LinearLayout>
