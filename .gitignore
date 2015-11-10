@@ -39,3 +39,4 @@ _ReSharper*/
 hs_err_pid*
 /gen
 /.settings
+/libs
