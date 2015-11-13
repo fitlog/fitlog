@@ -1,12 +1,8 @@
 package com.tuoved.app.ui;
 
-import android.app.AlertDialog;
-import android.app.Dialog;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
-import android.content.DialogInterface;
-import android.content.Intent;
 import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.net.Uri;
@@ -16,43 +12,32 @@ import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentActivity;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentTransaction;
-import android.support.v4.app.ListFragment;
 import android.support.v4.app.LoaderManager.LoaderCallbacks;
 import android.support.v4.content.CursorLoader;
 import android.support.v4.content.Loader;
-import android.support.v4.widget.SimpleCursorAdapter;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
-import android.view.ContextMenu;
-import android.view.ContextMenu.ContextMenuInfo;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.ViewGroup;
-import android.widget.AdapterView;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.ListView;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import com.tuoved.app.R;
 import com.tuoved.app.provider.ProviderMetaData.Data;
 import com.tuoved.app.provider.ProviderMetaData.Labels;
+import com.tuoved.app.ui.LabelsFragment.OnLabelPopupMenuListener;
 import com.tuoved.app.utils.Utils;
 
-public class MainActivity extends FragmentActivity  implements OnClickListener {
+public class MainActivity extends FragmentActivity  implements OnClickListener, OnLabelPopupMenuListener {
 	private static final String TAG = "MainActivity";
+	private static final String TAG_CHANGE_DIALOG = "change_dialog";
 	private static final String HISTORY_IS_UPDATED = "history_is_updated";
-	private static long mSelectedRowId = 0;
-	private static final int ACTION_DELETE = 0;
-	private static final int ACTION_CLEAR_HISTORY = 1;
-	private static final int ACTION_CHANGE_LABEL = 2;
-	
-	public final static String EXTRA_ID_EXERCISE = "com.tuoved.app.id_exercise";
 	private EditText editText;
 	private Button button_add;
 
@@ -81,18 +66,11 @@ public class MainActivity extends FragmentActivity  implements OnClickListener {
 			.replace(R.id.labels_container, LabelsFragment.newInstance())
 			.commit();
 	}
-
-	// -------------------------------------------------------------------------
-	@Override
-	public void onBackPressed() {
-		showExitDialog();
-	}
 	
 	// -------------------------------------------------------------------------
 	@Override
 	public boolean onCreateOptionsMenu(Menu menu)
 	{
-		// Inflate the menu; this adds items to the action bar if it is present.
 //		getMenuInflater ().inflate ( R.menu.exercise_list, menu );
 		return super.onCreateOptionsMenu(menu);
 	}
@@ -102,6 +80,7 @@ public class MainActivity extends FragmentActivity  implements OnClickListener {
 	public boolean onPrepareOptionsMenu(Menu menu) {
 		return super.onPrepareOptionsMenu(menu);
 	}
+	
 	// -------------------------------------------------------------------------
 	@Override
 	public boolean onOptionsItemSelected(MenuItem item)
@@ -109,52 +88,13 @@ public class MainActivity extends FragmentActivity  implements OnClickListener {
 		return super.onOptionsItemSelected ( item );
 	}
 	
-	@Override
-	public void onCreateContextMenu(ContextMenu menu, View v,
-			ContextMenuInfo menuInfo) {
-		menu.add(0, ACTION_CHANGE_LABEL, 0, R.string.change);
-		menu.add(0, ACTION_CLEAR_HISTORY, 0, R.string.clear_history);
-		menu.add(0, ACTION_DELETE, 0, R.string.delete);
-		super.onCreateContextMenu(menu, v, menuInfo);
-	}
-	
-	@Override
-	public boolean onContextItemSelected(MenuItem item) {
-		AdapterView.AdapterContextMenuInfo info = (AdapterView.AdapterContextMenuInfo)item.getMenuInfo();
-		switch(item.getItemId()) {
-		case ACTION_DELETE:
-			mSelectedRowId = info.id;
-			deleteLabel();
-			break;
-		case ACTION_CLEAR_HISTORY:
-			if(clear_history(info.id) > 0)
-			{
-				TextView tv = (TextView)info.targetView.findViewById(android.R.id.text1);
-				String text = tv.getText().toString();
-				Toast.makeText(this, "История " + text +" очищена.", Toast.LENGTH_SHORT).show();
-			}
-			break;
-		case ACTION_CHANGE_LABEL:
-			final String tag = "dialog";
-			FragmentTransaction ft = getSupportFragmentManager().beginTransaction();
-		    Fragment prev = getSupportFragmentManager().findFragmentByTag(tag);
-		    if (prev != null) {
-		        ft.remove(prev);
-		    }
-		    ft.addToBackStack(null);
-		    DialogFragment dlg = ChangeLabelDialog.newInstance(info.id);
-		    dlg.show(ft, tag);
-		default:
-			break;
-		}
-		return super.onContextItemSelected(item);
-	}
-	
+	// -------------------------------------------------------------------------
 	private int clear_history(long id) {
 		String where = Data.LABEL_ID + "=?";
 		return getContentResolver().delete(Data.CONTENT_URI, where, new String[]{String.valueOf(id)});
 	}
 	
+	// -------------------------------------------------------------------------
 	private void update_history() {
 		final String [] PROJECTION = 
 				new String[] {
@@ -211,11 +151,6 @@ public class MainActivity extends FragmentActivity  implements OnClickListener {
 	}
 
 	// -------------------------------------------------------------------------
-	private void showExitDialog() {
-		ExitDialog.getInstance().show(getSupportFragmentManager(), null);
-	}
-
-	// -------------------------------------------------------------------------
 	private TextWatcher editTextWatcher = new TextWatcher ()
 	{
 		@Override
@@ -251,141 +186,43 @@ public class MainActivity extends FragmentActivity  implements OnClickListener {
 		Uri insUri = getContentResolver().insert(uri, cv);
 		Log.d(TAG,"Inserted Uri: " + insUri);
 	}
+	
 	// -------------------------------------------------------------------------
-	public void deleteLabel(){
+	public void deleteLabel(final long id){
 		Uri uri = Labels.CONTENT_URI.buildUpon()
-				.appendPath(String.valueOf(mSelectedRowId)).build();
+				.appendPath(String.valueOf(id)).build();
 		getContentResolver().delete(uri, null, null);
 		Log.d(TAG,"Deleted Uri: " + uri);
-		mSelectedRowId = 0;
 	}
 	
 	// -------------------------------------------------------------------------
-	// LabelsFragment
+	@Override
+	public void onChangeLabel(long id) {
+		FragmentTransaction ft = getSupportFragmentManager().beginTransaction();
+	    Fragment prev = getSupportFragmentManager().findFragmentByTag(TAG_CHANGE_DIALOG);
+	    if (prev != null) {
+	        ft.remove(prev);
+	    }
+	    ft.addToBackStack(null);
+	    DialogFragment dlg = ChangeLabelDialog.newInstance(id);
+	    dlg.show(ft, TAG_CHANGE_DIALOG);
+	}
+
 	// -------------------------------------------------------------------------
-	public static class LabelsFragment extends ListFragment implements LoaderCallbacks<Cursor> {
-		SimpleCursorAdapter mAdapter;
-		protected static final int ID_LOADER = 0;
-		private View rootView;
-		
-		public static LabelsFragment newInstance() {
-			return new LabelsFragment();
-		}
-
-		public LabelsFragment() {
-		};
-		
-		// -------------------------------------------------------------------------
-		@Override
-		public void onCreate(Bundle savedInstanceState) {
-			super.onCreate(savedInstanceState);
-			getLoaderManager().initLoader(ID_LOADER, null, this);
-		}
-		
-		// -------------------------------------------------------------------------
-		@Override
-		public View onCreateView(LayoutInflater inflater, ViewGroup container,
-				Bundle savedInstanceState) {
-			rootView = inflater.inflate(R.layout.labels_fragment, container, false);
-			return rootView;
-		}
-		
-		@Override
-		public void onDestroy() {
-			getLoaderManager().destroyLoader(ID_LOADER);
-			super.onDestroy();
-		}
-		// -------------------------------------------------------------------------
-		@Override
-		public void onDestroyView() {
-			super.onDestroyView();
-			rootView = null;
-		}
-		
-		// -------------------------------------------------------------------------
-		@Override
-		public void onActivityCreated(Bundle savedInstanceState) {
-			super.onActivityCreated(savedInstanceState);
-			final String[] FROM = {Labels.NAME};
-			final int[] TO = {android.R.id.text1};
-			mAdapter = 	new SimpleCursorAdapter(getActivity(),
-					android.R.layout.simple_list_item_1,
-					null, FROM, TO , 0);
-			
-			setListAdapter(mAdapter);
-			ListView lw = getListView();
-			registerForContextMenu(lw);
-			lw.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-
-				@Override
-				public void onItemClick(AdapterView<?> parent, View view,
-						int position, long id) {
-					Intent intent = new Intent ( getActivity(), ExerciseActivity.class );
-					intent.putExtra ( EXTRA_ID_EXERCISE, id );
-					if(id > 0)
-						getActivity().startActivity ( intent );
-				}
-			});
-		}
-		
-		// -------------------------------------------------------------------------
-		@Override
-		public Loader<Cursor> onCreateLoader(int loader, Bundle arg1) {
-			Uri uri = Labels.CONTENT_URI;
-			String[] projection = { 
-					Labels._ID,
-					Labels.NAME
-					};
-			return new CursorLoader( getActivity().getApplicationContext(),
-					uri, projection, null, null, null);
-		}
-
-		// -------------------------------------------------------------------------
-		@Override
-		public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
-			mAdapter.swapCursor(data);
-		}
-
-		// -------------------------------------------------------------------------
-		@Override
-		public void onLoaderReset(Loader<Cursor> loader) {
-			mAdapter.swapCursor(null);
+	@Override
+	public void onClearHistory(long id, String label) {
+		if(clear_history(id) > 0) {
+			Toast.makeText(this, "История " + label + " очищена", Toast.LENGTH_SHORT).show();
 		}
 	}
-	
-	public static class ExitDialog extends DialogFragment{
-		
-		public ExitDialog() {
-			
-		}
-		
-		public static ExitDialog getInstance() {
-			return new ExitDialog();
-		}
-		
-		@Override
-		public Dialog onCreateDialog(Bundle savedInstanceState) {
-			AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
-			builder.setTitle(R.string.exit_question);
-			builder.setPositiveButton (R.string.yes,
-				new DialogInterface.OnClickListener() {
-					@Override
-					public void onClick(DialogInterface dialog, int which) {
-						getActivity().finish ();
-					}
-				} );
-			builder.setNegativeButton ( R.string.no,
-				new DialogInterface.OnClickListener() {
-					@Override
-					public void onClick(DialogInterface dialog, int which) {
-						dialog.cancel ();
-					}
-				} );
-			builder.setCancelable(false);
-			return builder.create();
-		}
+
+	// -------------------------------------------------------------------------
+	@Override
+	public void onDeleteLabel(long id) {
+		deleteLabel(id);
 	}
 	
+	// -------------------------------------------------------------------------
 	public static class ChangeLabelDialog extends DialogFragment implements LoaderCallbacks<Cursor>, OnClickListener {
 		private static final String ID_LABEL_KEY = "id";
 		private static final int ID_LOADER_CHANGE = 10;
@@ -399,6 +236,7 @@ public class MainActivity extends FragmentActivity  implements OnClickListener {
 			
 		}
 		
+		// -------------------------------------------------------------------------
 		public static ChangeLabelDialog newInstance(long id) {
 			ChangeLabelDialog dlg = new ChangeLabelDialog();
 			Bundle args = new Bundle();
@@ -407,35 +245,41 @@ public class MainActivity extends FragmentActivity  implements OnClickListener {
 			return dlg;
 		}
 		
+		// -------------------------------------------------------------------------
 		@Override
 		public void onCreate(Bundle savedInstanceState) {
 			super.onCreate(savedInstanceState);
+			setStyle(STYLE_NO_TITLE, 0);
 			getLoaderManager().restartLoader(ID_LOADER_CHANGE, getArguments(), this);
 		}
 		
-		@Override
-		public void onDestroy() {
-			getLoaderManager().destroyLoader(ID_LOADER_CHANGE);
-			super.onDestroy();
-		}
-		
+		// -------------------------------------------------------------------------
 		@Override
 		public View onCreateView(LayoutInflater inflater, ViewGroup container,
 				Bundle savedInstanceState) {
-			getDialog().setTitle(R.string.change_question);
 			mView = inflater.inflate(R.layout.change_label_dialog, container, false);
 			etLabel = (EditText)mView.findViewById(R.id.etLabel);
 			btnChange = (Button)mView.findViewById(R.id.btnChange);
 			btnChange.setOnClickListener(this);
 			return mView;
 		}
+		// -------------------------------------------------------------------------
+		@Override
+		public void onDestroy() {
+			getLoaderManager().destroyLoader(ID_LOADER_CHANGE);
+			super.onDestroy();
+		}
 		
+		
+		
+		// -------------------------------------------------------------------------
 		@Override
 		public void onDestroyView() {
 			mView = null;
 			super.onDestroyView();
 		}
 
+		// -------------------------------------------------------------------------
 		@Override
 		public Loader<Cursor> onCreateLoader(int id_loader, Bundle bundle) {
 			if(bundle==null)
@@ -444,6 +288,7 @@ public class MainActivity extends FragmentActivity  implements OnClickListener {
 			return new CursorLoader(getActivity(), mUri, new String[]{Labels.NAME}, null, null, null);
 		}
 
+		// -------------------------------------------------------------------------
 		@Override
 		public void onLoadFinished(Loader<Cursor> loader, Cursor c) {
 			if(loader!=null && c!=null) {
@@ -454,10 +299,12 @@ public class MainActivity extends FragmentActivity  implements OnClickListener {
 			}
 		}
 
+		// -------------------------------------------------------------------------
 		@Override
 		public void onLoaderReset(Loader<Cursor> arg0) {
 		}
 
+		// -------------------------------------------------------------------------
 		@Override
 		public void onClick(View v) {
 			Utils.hideKeyboard(getActivity(), v);
@@ -470,6 +317,7 @@ public class MainActivity extends FragmentActivity  implements OnClickListener {
 			dismiss();
 		}
 		
+		// -------------------------------------------------------------------------
 		private void updateLabel() {
 			if(!checkLabel()) {
 				Toast.makeText(getActivity(), R.string.check_entered_data, Toast.LENGTH_SHORT).show();
@@ -484,11 +332,13 @@ public class MainActivity extends FragmentActivity  implements OnClickListener {
 				Toast.makeText(getActivity(), R.string.data_successfully_updated, Toast.LENGTH_SHORT).show();
 		}
 		
+		// -------------------------------------------------------------------------
 		private boolean checkLabel() {
 			boolean isValid = (etLabel.length()!=0) ? true : false;
 			return isValid;
 		}
 		
+		// -------------------------------------------------------------------------
 		private boolean isNeedToUpdate() {
 			String editedLabel = etLabel.getText().toString();
 			return !loadedLabel.equalsIgnoreCase(editedLabel);

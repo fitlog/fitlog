@@ -1,5 +1,6 @@
 package com.tuoved.app.ui;
 
+import android.R.anim;
 import android.annotation.TargetApi;
 import android.content.ContentResolver;
 import android.content.ContentValues;
@@ -43,14 +44,14 @@ import android.widget.Toast;
 import com.tuoved.app.R;
 import com.tuoved.app.provider.ProviderMetaData.Data;
 import com.tuoved.app.provider.ProviderMetaData.Labels;
-import com.tuoved.app.ui.ExerciseListFragment.OnExerciseContextMenuListener;
+import com.tuoved.app.ui.ExerciseListFragment.OnExercisePopupMenuListener;
 import com.tuoved.app.utils.EditTextExtended;
 import com.tuoved.app.utils.ExerciseData;
 import com.tuoved.app.utils.TextWatcherExtended;
 import com.tuoved.app.utils.Utils;
 
 public class ExerciseActivity extends FragmentActivity implements 
-OnClickListener, LoaderCallbacks<Cursor>, OnFocusChangeListener, OnExerciseContextMenuListener {
+OnClickListener, LoaderCallbacks<Cursor>, OnFocusChangeListener, OnExercisePopupMenuListener {
 	private static final String TAG = "ExerciseActivity";
 	private static final String TAG_DIALOG = "dialog";
 
@@ -82,7 +83,7 @@ OnClickListener, LoaderCallbacks<Cursor>, OnFocusChangeListener, OnExerciseConte
 	private ExerciseData temp_data = new ExerciseData();
 	private ExerciseData data;
 	private int last_count_approach;
-	private static int last_count_training;
+	private int last_count_training;
 	private long last_date;
 	private static Uri lastInsertedUri;
 	private SharedPreferences settings;
@@ -165,7 +166,7 @@ OnClickListener, LoaderCallbacks<Cursor>, OnFocusChangeListener, OnExerciseConte
 			this.setTitle ( mTitle );
 			return;
 		}
-		mLabelId = intent.getLongExtra( MainActivity.EXTRA_ID_EXERCISE, 0 );
+		mLabelId = intent.getLongExtra( LabelsFragment.EXTRA_ID_EXERCISE, 0 );
 		String pathSegment = String.valueOf(mLabelId);
 		final Uri uri = Labels.CONTENT_URI.buildUpon().appendPath(pathSegment).build();
 		Cursor cursor = getContentResolver().query(uri, null, null, null, null);
@@ -623,9 +624,8 @@ OnClickListener, LoaderCallbacks<Cursor>, OnFocusChangeListener, OnExerciseConte
 			ft.remove(prev);
 		}
 		ft.addToBackStack(null);
-
-		DialogFragment newFragment = ExerciseDataChangeDialog.newInstance(id);
-		newFragment.show(ft, TAG_DIALOG);
+		DialogFragment dialog = ExerciseDataChangeDialog.newInstance(id);
+		dialog.show(ft, TAG_DIALOG);
 	}
 	
 	// -------------------------------------------------------------------------
@@ -664,9 +664,7 @@ OnClickListener, LoaderCallbacks<Cursor>, OnFocusChangeListener, OnExerciseConte
 		ExerciseData loadedData, changedData;
 
 		// -------------------------------------------------------------------------
-		public ExerciseDataChangeDialog() {
-
-		}
+		public ExerciseDataChangeDialog() {	}
 
 		// -------------------------------------------------------------------------
 		public static ExerciseDataChangeDialog newInstance(long id) {
@@ -681,7 +679,6 @@ OnClickListener, LoaderCallbacks<Cursor>, OnFocusChangeListener, OnExerciseConte
 		@Override
 		public View onCreateView(LayoutInflater inflater, ViewGroup container,
 				Bundle savedInstanceState) {
-			getDialog().setTitle(R.string.change_question);
 			mView = inflater.inflate(R.layout.exercise_data_dialog, container, false);
 			etWeight = (EditText)mView.findViewById(R.id.etWeight);
 			etWeight.setOnFocusChangeListener(this);
@@ -701,6 +698,7 @@ OnClickListener, LoaderCallbacks<Cursor>, OnFocusChangeListener, OnExerciseConte
 		@Override
 		public void onCreate(Bundle savedInstanceState) {
 			super.onCreate(savedInstanceState);
+			setStyle(STYLE_NO_TITLE, 0);
 			getLoaderManager().restartLoader(ID_LOADER_CHANGE, getArguments(), this);
 		}
 
@@ -819,7 +817,7 @@ OnClickListener, LoaderCallbacks<Cursor>, OnFocusChangeListener, OnExerciseConte
 	}
 
 	// -------------------------------------------------------------------------
-	public static class ExercisePagerAdapter extends FragmentStatePagerAdapter {
+	private class ExercisePagerAdapter extends FragmentStatePagerAdapter {
 
 		private int mCount;
 

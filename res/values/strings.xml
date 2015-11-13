@@ -22,6 +22,7 @@
 	<string name="approach_number">№</string>
 	<string name="exit_question">Хотите выйти?</string>
 	<string name="change_question">Изменить?</string>
+	<string name="apply">Применить</string>
 	<string name="data_successfully_updated">"Данные успешно обновлены"</string>
 	<string name="yes">Да</string>
 	<string name="no">Нет</string>

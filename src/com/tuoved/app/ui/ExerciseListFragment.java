@@ -10,6 +10,7 @@ import android.support.v4.app.LoaderManager.LoaderCallbacks;
 import android.support.v4.content.CursorLoader;
 import android.support.v4.content.Loader;
 import android.support.v4.widget.CursorAdapter;
+import android.support.v7.widget.PopupMenu;
 import android.text.format.DateFormat;
 import android.view.ContextMenu;
 import android.view.ContextMenu.ContextMenuInfo;
@@ -31,17 +32,16 @@ public class ExerciseListFragment extends ListFragment implements LoaderCallback
 	private static final String KEY_POSITION_PAGER = "position_pager";
 	private static final String KEY_LABEL_ID = "label_id";
 	
-	private static final int ACTION_DELETE = 1;
-	private static final int ACTION_CHANGE = 0;
 	private final int ID_LIST_LOADER = 100;
 	private ListView mListView;
 	private View mView;
 	private TextView tvNoData;
+	PopupMenu mPopupMenu;
 	private ExerciseListAdapter mListAdapter;
-	private OnExerciseContextMenuListener mListener;
+	private OnExercisePopupMenuListener mListener;
 	
 	// --------------------------------------------------------------------------------------------
-	public interface OnExerciseContextMenuListener {
+	public interface OnExercisePopupMenuListener {
 		public void onChangeData(long id);
 		public void onDeleteData(long id);
 	}
@@ -83,7 +83,14 @@ public class ExerciseListFragment extends ListFragment implements LoaderCallback
 		mListAdapter = new ExerciseListAdapter(getActivity(), R.layout.row_item, null);
 		setListAdapter(mListAdapter);
 		mListView = getListView();
-		registerForContextMenu(mListView);
+		mListView.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
+			@Override
+			public boolean onItemLongClick(AdapterView<?> parent, View view,
+					int position, long id) {
+				showPopupMenu(view, id);
+				return true;
+			}
+		});
 	}
 	
 	// --------------------------------------------------------------------------------------------
@@ -91,7 +98,7 @@ public class ExerciseListFragment extends ListFragment implements LoaderCallback
 	public void onAttach(Activity activity) {
 		super.onAttach(activity);
 		try {
-			mListener = (OnExerciseContextMenuListener)activity;
+			mListener = (OnExercisePopupMenuListener)activity;
 		} catch(ClassCastException e) {
 			throw new ClassCastException(activity.toString() 
 					+ " must implement OnExerciseContextMenuListener");
@@ -99,45 +106,56 @@ public class ExerciseListFragment extends ListFragment implements LoaderCallback
 	}
 	
 	// --------------------------------------------------------------------------------------------
+	private void showPopupMenu(View v, final long id) {
+		Context context = getActivity();
+		context.setTheme(R.style.Theme_AppCompat);
+		mPopupMenu = new PopupMenu(context, v);
+		mPopupMenu.inflate(R.menu.exercise_popup_menu);
+		mPopupMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
+			
+			@Override
+			public boolean onMenuItemClick(MenuItem item) {
+				if(getUserVisibleHint() == false)
+			        return false;
+				switch(item.getItemId()) {
+				case R.id.change_menu: {
+					mListener.onChangeData(id);
+					return true;
+				}
+				case R.id.delete_menu: {
+					mListener.onDeleteData(id);
+					return true;
+				}
+				}
+				return false;
+			}
+		});
+		mPopupMenu.show();
+	}
+	
+	// -------------------------------------------------------------------------
 	@Override
-	public void onCreateContextMenu(ContextMenu menu, View v,
-			ContextMenuInfo menuInfo) {
-		menu.add(0, ACTION_CHANGE, 0, R.string.change);
-		menu.add(0, ACTION_DELETE, 0, R.string.delete);
-		super.onCreateContextMenu(menu, v, menuInfo);
+	public void onStop() {
+		super.onStop();
+		if(mPopupMenu!=null)
+			mPopupMenu.dismiss();
 	}
 	
 	// --------------------------------------------------------------------------------------------
-	@Override
-	public boolean onContextItemSelected(MenuItem item) {
-		if( getUserVisibleHint() == false )
-	        return false;
-		AdapterView.AdapterContextMenuInfo info = (AdapterView.AdapterContextMenuInfo)item.getMenuInfo();
-		switch(item.getItemId()) {
-		case ACTION_CHANGE: {
-			mListener.onChangeData(info.id);
-			break;
-		}
-		case ACTION_DELETE:	{
-			mListener.onDeleteData(info.id);
-			break;
-		}
-		}
-		return super.onContextItemSelected(item);
-	}
-	
 	@Override
 	public void onDestroy() {
 		super.onDestroy();
 		getLoaderManager().destroyLoader(ID_LIST_LOADER);
 	}
 	
+	// --------------------------------------------------------------------------------------------
 	@Override
 	public void onDestroyView() {
 		super.onDestroyView();
 		mView = null;
 	}
 	
+	// --------------------------------------------------------------------------------------------
 	@Override
 	public void onDetach() {
 		super.onDetach();
