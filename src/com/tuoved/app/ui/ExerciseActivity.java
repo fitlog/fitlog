@@ -1,6 +1,5 @@
 package com.tuoved.app.ui;
 
-import android.R.anim;
 import android.annotation.TargetApi;
 import android.content.ContentResolver;
 import android.content.ContentValues;
@@ -29,6 +28,7 @@ import android.support.v4.content.Loader;
 import android.support.v4.view.PagerTabStrip;
 import android.support.v4.view.ViewPager;
 import android.text.Editable;
+import android.text.TextWatcher;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -45,9 +45,7 @@ import com.tuoved.app.R;
 import com.tuoved.app.provider.ProviderMetaData.Data;
 import com.tuoved.app.provider.ProviderMetaData.Labels;
 import com.tuoved.app.ui.ExerciseListFragment.OnExercisePopupMenuListener;
-import com.tuoved.app.utils.EditTextExtended;
 import com.tuoved.app.utils.ExerciseData;
-import com.tuoved.app.utils.TextWatcherExtended;
 import com.tuoved.app.utils.Utils;
 
 public class ExerciseActivity extends FragmentActivity implements 
@@ -77,9 +75,8 @@ OnClickListener, LoaderCallbacks<Cursor>, OnFocusChangeListener, OnExercisePopup
 	private static ViewPager mPager;
 	private static PagerTabStrip mPagerTabStrip;
 	private static LinearLayout mLayoutHeader;
-	
 
-	private EditTextExtended etRelax, etRepeats, etWeight;
+	private EditText etRelax, etRepeats, etWeight;
 	private ExerciseData temp_data = new ExerciseData();
 	private ExerciseData data;
 	private int last_count_approach;
@@ -98,10 +95,10 @@ OnClickListener, LoaderCallbacks<Cursor>, OnFocusChangeListener, OnExercisePopup
 		setContentView (R.layout.activity_exercise );
 		setupActionBar();
 		getViewFromId();
+		registerListeners();
 		loadSettings();
 		setLabel(getIntent());
 		fillData();
-		registerListeners();
 		mPowerManager = (PowerManager)getSystemService(POWER_SERVICE);
 		mWakeLock = mPowerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, TAG);
 		mRingtonManager = new RingtoneManager(this);
@@ -151,9 +148,9 @@ OnClickListener, LoaderCallbacks<Cursor>, OnFocusChangeListener, OnExercisePopup
 	private void getViewFromId() {
 		// Initialization layout variables
 		btn_start = (Button) findViewById ( R.id.button_Start );
-		etRelax = (EditTextExtended) findViewById ( R.id.etRelax );
-		etRepeats = (EditTextExtended) findViewById ( R.id.etRepeats );
-		etWeight = (EditTextExtended) findViewById ( R.id.etWeight );
+		etRelax = (EditText) findViewById ( R.id.etRelax );
+		etRepeats = (EditText) findViewById ( R.id.etRepeats );
+		etWeight = (EditText) findViewById ( R.id.etWeight );
 		text_timer = (TextView) findViewById ( R.id.timerView );
 		text_timer.setVisibility(View.GONE);
 		mPager = (ViewPager)findViewById(R.id.pager);
@@ -201,78 +198,95 @@ OnClickListener, LoaderCallbacks<Cursor>, OnFocusChangeListener, OnExercisePopup
 	private void registerListeners() {
 		btn_start.setOnClickListener (this);
 		btn_start.setOnFocusChangeListener(this);
-		etWeight.addTextChangedListener ( mEditTextWatcher );
+		etWeight.addTextChangedListener(mWeightWatcher);
 		etWeight.setOnFocusChangeListener(this);
 		etWeight.setSelectAllOnFocus(true);
-		etRepeats.addTextChangedListener ( mEditTextWatcher );
+		etRepeats.addTextChangedListener ( mRepeatWatcher );
 		etRepeats.setOnFocusChangeListener(this);
 		etRepeats.setSelectAllOnFocus(true);
-		etRelax.addTextChangedListener ( mEditTextWatcher );		
+		etRelax.addTextChangedListener ( mRelaxWatcher );		
 		etRelax.setOnFocusChangeListener(this);
 		etRelax.setSelectAllOnFocus(true);
 	}
 
 	// -------------------------------------------------------------------------
-	private TextWatcherExtended mEditTextWatcher = new TextWatcherExtended ()
-	{
+	private TextWatcher mWeightWatcher = new TextWatcher ()	{
 		@Override
-		public void onTextChanged(View v, CharSequence s, int start, int before,
+		public void onTextChanged(CharSequence s, int start, int before,
 				int count)
 		{
 			if(temp_data==null) 
 				return;
-			switch(v.getId()) {
-			case R.id.etWeight: {
-				try	{
-					temp_data.setWeight(Float.valueOf(s.toString ()));
-				}
-				catch (NumberFormatException e)	{
-					temp_data.setWeight(0);
-				} finally {
-					savePreferences("Weight", temp_data.weight());
-				}
-				break;
+			try	{
+				temp_data.setWeight(Float.valueOf(s.toString ()));
 			}
-			case R.id.etRelax: {
-				try	{
-					temp_data.setRelax(Long.valueOf(s.toString ()));
-				}
-				catch (NumberFormatException e)	{
-					temp_data.setRelax(30);
-				} finally {
-					savePreferences("Relax", temp_data.relax());
-				}
-				break;
-			}
-			case R.id.etRepeats: {
-				try	{
-					temp_data.setRepeats(Integer.valueOf(s.toString ()));
-				}
-				catch (NumberFormatException e)	{
-					temp_data.setRepeats(0);
-				} finally {
-					savePreferences( "RepeatNum", temp_data.repeats());
-				}
-				break;
-			}
-			default:
-				return;
+			catch (NumberFormatException e)	{
+				temp_data.setWeight(0);
+			} finally {
+				savePreferences("Weight", temp_data.weight());
 			}
 		}
 
 		@Override
-		public void afterTextChanged(View v, Editable s) {}
+		public void afterTextChanged(Editable s) {}
 		@Override
-		public void beforeTextChanged(View v, CharSequence s, int start, int count,
+		public void beforeTextChanged(CharSequence s, int start, int count,
 				int after) {}
 	};
+			
+	// -------------------------------------------------------------------------
+	private TextWatcher mRelaxWatcher = new TextWatcher ()	{
+		@Override
+		public void onTextChanged(CharSequence s, int start, int before,
+				int count)
+		{
+			if(temp_data==null) 
+				return;
+				try	{
+					temp_data.setRelax(Long.valueOf(s.toString ()));
+				} catch (NumberFormatException e) {
+					temp_data.setRelax(30);
+				} finally {
+					savePreferences("Relax", temp_data.relax());
+				}
+		}
+		
+		@Override
+		public void afterTextChanged(Editable s) {}
+		@Override
+		public void beforeTextChanged(CharSequence s, int start, int count,
+				int after) {}
+	};
+	
+	// -------------------------------------------------------------------------
+	private TextWatcher mRepeatWatcher = new TextWatcher ()	{
+		@Override
+		public void onTextChanged(CharSequence s, int start, int before,
+				int count)
+		{
+			if(temp_data==null) 
+				return;
+				try	{
+					temp_data.setRepeats(Integer.valueOf(s.toString ()));
+				} catch (NumberFormatException e)	{
+					temp_data.setRepeats(0);
+				} finally {
+					savePreferences( "RepeatNum", temp_data.repeats());
+				}
+		}
+		@Override
+		public void afterTextChanged(Editable s) {}
+		@Override
+		public void beforeTextChanged(CharSequence s, int start, int count,
+				int after) {}
+		};
 
 	// -------------------------------------------------------------------------
 	void savePreferences(String key, int value) {
 		SharedPreferences settings = getSharedPreferences (
 				SETTINGS_FILE, MODE_PRIVATE );
 		SharedPreferences.Editor setEditor = settings.edit ();
-		setEditor.putInt ( key, value );
+		setEditor.putInt (key, value);
 		setEditor.commit();
 	}
 
@@ -281,7 +295,7 @@ OnClickListener, LoaderCallbacks<Cursor>, OnFocusChangeListener, OnExercisePopup
 		SharedPreferences settings = getSharedPreferences (
 				SETTINGS_FILE, MODE_PRIVATE );
 		SharedPreferences.Editor setEditor = settings.edit ();
-		setEditor.putFloat( key, value );
+		setEditor.putFloat(key, value);
 		setEditor.commit();
 	}
 
@@ -290,7 +304,7 @@ OnClickListener, LoaderCallbacks<Cursor>, OnFocusChangeListener, OnExercisePopup
 		SharedPreferences settings = getSharedPreferences (
 				SETTINGS_FILE, MODE_PRIVATE );
 		SharedPreferences.Editor setEditor = settings.edit ();
-		setEditor.putLong( key, value );
+		setEditor.putLong(key, value);
 		setEditor.commit();
 	}
 

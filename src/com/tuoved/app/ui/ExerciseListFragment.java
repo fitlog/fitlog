@@ -50,7 +50,7 @@ public class ExerciseListFragment extends ListFragment implements LoaderCallback
 	public ExerciseListFragment(){}
 
 	// --------------------------------------------------------------------------------------------
-	static ExerciseListFragment newInstance(int pos_pager, int num_training, long label_id ) {
+	public static ExerciseListFragment newInstance(int pos_pager, int num_training, long label_id ) {
 		ExerciseListFragment f = new ExerciseListFragment();
 		Bundle args = new Bundle();
 		args.putInt(KEY_POSITION_PAGER, pos_pager);
@@ -80,7 +80,7 @@ public class ExerciseListFragment extends ListFragment implements LoaderCallback
 	@Override
 	public void onActivityCreated(Bundle savedInstanceState) {
 		super.onActivityCreated(savedInstanceState);
-		mListAdapter = new ExerciseListAdapter(getActivity(), R.layout.row_item, null);
+		mListAdapter = new ExerciseListAdapter(getActivity(), R.layout.data_row, null);
 		setListAdapter(mListAdapter);
 		mListView = getListView();
 		mListView.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {

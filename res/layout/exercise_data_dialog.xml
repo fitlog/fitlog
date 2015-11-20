@@ -68,7 +68,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content" >
 
-            <com.tuoved.app.utils.EditTextExtended
+            <EditText
                 android:id="@+id/etWeight"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -78,7 +78,7 @@
                 android:ems="10"
                 android:inputType="numberDecimal" />
 
-            <com.tuoved.app.utils.EditTextExtended
+            <EditText
                 android:id="@+id/etRepeats"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -89,7 +89,7 @@
                 android:ems="10"
                 android:inputType="number" />
 
-            <com.tuoved.app.utils.EditTextExtended
+            <EditText
                 android:id="@+id/etRelax"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
