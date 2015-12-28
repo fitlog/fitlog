@@ -1,5 +1,7 @@
 package com.tuoved.app.ui;
 
+import java.util.Locale;
+
 import android.app.Activity;
 import android.content.Context;
 import android.database.Cursor;
@@ -228,7 +230,7 @@ public class ExerciseListFragment extends ListFragment implements LoaderCallback
 
 	// -------------------------------------------------------------------------
 	private class ExerciseListAdapter extends CursorAdapter {
-		private final CharSequence DATE_FORMAT = "dd-MM-yy (EEE) kk:mm";
+		private final CharSequence DATE_FORMAT = "EEE dd-MM-yy kk:mm";
 
 		private LayoutInflater mInflater;
 		private int mLayout;
@@ -273,8 +275,7 @@ public class ExerciseListFragment extends ListFragment implements LoaderCallback
 			if(holder.tvHeader != null) {
 				if( training_cur != training_prev ) {
 					dt = DateFormat.format(DATE_FORMAT, time_cur_ms);
-					int count_training = c.getInt(c.getColumnIndexOrThrow(Data.COUNT_TRAINING));
-					holder.tvHeader.setText("["+String.valueOf(count_training)+"] "+dt);
+					holder.tvHeader.setText(dt.toString().toUpperCase());
 					holder.tvHeader.setVisibility(View.VISIBLE);
 				}
 				else {

@@ -9,7 +9,7 @@
         android:layout_width="match_parent"
         android:layout_height="0dip"
         android:layout_weight="1"
-        android:background="@drawable/draw"
+        android:background="@drawable/draw_green"
         android:gravity="center"
         android:textSize="18sp"
         android:textStyle="bold" />

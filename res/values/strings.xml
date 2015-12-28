@@ -12,6 +12,7 @@
     <string name="enter_time">Введите длительность упражнения</string>
     <string name="delete">Удалить</string>
     <string name="change">Изменить</string>
+    <string name="training_days">Дни тренировок</string>
     <string name="cancel">Отмена</string>
     <string name="clear_history">Очистить историю</string>
     <string name="delete_record">Удалить запись</string>

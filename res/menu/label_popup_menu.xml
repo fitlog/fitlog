@@ -7,6 +7,10 @@
             android:title="@string/change"
             />
         <item
+            android:id="@+id/item_training_days"
+            android:title="@string/training_days"
+            />
+        <item
             android:id="@+id/item_clear_history"
             android:title="@string/clear_history"
             />

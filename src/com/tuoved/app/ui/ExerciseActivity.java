@@ -413,6 +413,7 @@ OnClickListener, LoaderCallbacks<Cursor>, OnFocusChangeListener, OnExercisePopup
 		}
 	}
 
+	// -------------------------------------------------------------------------
 	private boolean checkEnteredData() {
 		boolean isValidData = false;
 		if(etRelax!=null && etRepeats!=null && etWeight!=null)
@@ -472,7 +473,7 @@ OnClickListener, LoaderCallbacks<Cursor>, OnFocusChangeListener, OnExercisePopup
 		Log.d ( TAG, "Inserted URI: " + lastInsertedUri );
 		mLoaderManager.restartLoader(ID_LOADER, null, this);
 	}
-
+	
 	// -------------------------------------------------------------------------
 	private void removeExercise( Context context, Uri delUri ) {
 		ContentResolver cr = context.getContentResolver ();
@@ -765,9 +766,7 @@ OnClickListener, LoaderCallbacks<Cursor>, OnFocusChangeListener, OnExercisePopup
 		// -------------------------------------------------------------------------
 		@Override
 		public Loader<Cursor> onCreateLoader(int id_loader, Bundle bundle) {
-			if(bundle==null)
-				return null;
-			if(id_loader!=ID_LOADER_CHANGE) 
+			if(bundle==null && id_loader!=ID_LOADER_CHANGE)
 				return null;
 			long id_data = 0;
 			id_data = bundle.getLong(ID_DATA_TO_CHANGE);

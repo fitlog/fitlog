@@ -6,6 +6,7 @@ import android.R.mipmap;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.Resources;
 import android.database.Cursor;
 import android.graphics.Rect;
 import android.net.Uri;
@@ -19,6 +20,7 @@ import android.support.v4.widget.SimpleCursorAdapter;
 import android.support.v7.widget.PopupMenu;
 import android.text.Layout;
 import android.text.format.DateFormat;
+import android.text.method.DateTimeKeyListener;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
@@ -51,6 +53,7 @@ public class LabelsFragment extends ListFragment implements LoaderCallbacks<Curs
 		public void onChangeLabel(long id);
 		public void onClearHistory(long id, String label);
 		public void onDeleteLabel(long id);
+		public void onChangeTrainingDays(long id);
 	}
 	
 	public static LabelsFragment newInstance() {
@@ -142,6 +145,9 @@ public class LabelsFragment extends ListFragment implements LoaderCallbacks<Curs
 					mListener.onDeleteLabel(id);
 					return true;
 				}
+				case R.id.item_training_days:
+					mListener.onChangeTrainingDays(id);
+					return true;
 				}
 				return false;
 			}
@@ -212,14 +218,19 @@ public class LabelsFragment extends ListFragment implements LoaderCallbacks<Curs
 	
 	
 	// -------------------------------------------------------------------------
-	private class LabelsCursorAdapter extends CursorAdapter{
-		private final CharSequence DATE_FORMAT = "Дата: dd.MM.yy";
+	private class LabelsCursorAdapter extends CursorAdapter {
+		private final CharSequence DATE_FORMAT = "dd.MM.yy";
+		private static final long MILLIS_IN_WEEK = 7*24*60*60*1000;
+		private static final long MILLIS_IN_HALF_WEEK = MILLIS_IN_WEEK/2;
+		
 		private final LayoutInflater mInflater;
 		private final int mLayout;
+		private final Resources mRes;
 		
 		// -------------------------------------------------------------------------
 		public LabelsCursorAdapter(Context context, int layout, Cursor c) {
 			super(context, c, false);
+			mRes = context.getResources();
 			mInflater = (LayoutInflater)context.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
 			mLayout = layout;
 		}
@@ -239,6 +250,7 @@ public class LabelsFragment extends ListFragment implements LoaderCallbacks<Curs
 		// -------------------------------------------------------------------------
 		@Override
 		public void bindView(View v, Context context, Cursor c) {
+			long cur_date = System.currentTimeMillis();
 			ViewHolder holder = (ViewHolder)v.getTag();
 			if(holder==null || c==null)
 				return;
@@ -246,8 +258,9 @@ public class LabelsFragment extends ListFragment implements LoaderCallbacks<Curs
 				String label = c.getString(c.getColumnIndexOrThrow(Labels.NAME));
 				holder.tvLabelName.setText(label);
 			}
+			long last_date = c.getLong(c.getColumnIndexOrThrow(LAST_DATE));
 			if(holder.tvLastDate!=null) {
-				long last_date = c.getLong(c.getColumnIndexOrThrow(LAST_DATE));
+				last_date = c.getLong(c.getColumnIndexOrThrow(LAST_DATE));
 				if(last_date == 0) {
 					holder.tvLastDate.setVisibility(View.INVISIBLE);
 				}
@@ -258,10 +271,27 @@ public class LabelsFragment extends ListFragment implements LoaderCallbacks<Curs
 				}
 			}
 			if(holder.tvNumTraining!=null) {
+				final int drawable_id = getDrawableIdFromDate(cur_date, last_date);
+				holder.tvNumTraining.setBackgroundResource(drawable_id);
 				final int num = c.getInt(c.getColumnIndexOrThrow(NUM_TRAINING));
 				String num_training = String.valueOf(num);
 				holder.tvNumTraining.setText(num_training);
 			}
+		}
+		
+		// -------------------------------------------------------------------------
+		private final int getDrawableIdFromDate(final long cur_date, final long last_date) {
+			int drawable_id = 0;
+			long delta_date = cur_date - last_date;
+			if( last_date == 0 )
+				return drawable_id = R.drawable.draw_green;
+			if(delta_date <= MILLIS_IN_HALF_WEEK)
+				drawable_id = R.drawable.draw_green;
+			else if(delta_date > MILLIS_IN_HALF_WEEK && delta_date <= MILLIS_IN_WEEK)
+				drawable_id = R.drawable.draw_yellow;
+			else if(delta_date > MILLIS_IN_WEEK)
+				drawable_id = R.drawable.draw_red;
+			return drawable_id;
 		}
 		
 		// -------------------------------------------------------------------------
@@ -289,7 +319,5 @@ public class LabelsFragment extends ListFragment implements LoaderCallbacks<Curs
 		String DATA_LABEL_ID = Data.TABLE_NAME + "." + Data.LABEL_ID;
 		String LABELS_ID = Labels.TABLE_NAME + "." + Labels._ID;
 	}
-	
-	
-	
+
 }

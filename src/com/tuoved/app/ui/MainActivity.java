@@ -1,5 +1,7 @@
 package com.tuoved.app.ui;
 
+import java.util.ArrayList;
+
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
@@ -25,6 +27,9 @@ import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.CompoundButton;
+import android.widget.CompoundButton.OnCheckedChangeListener;
 import android.widget.EditText;
 import android.widget.Toast;
 
@@ -37,6 +42,7 @@ import com.tuoved.app.utils.Utils;
 public class MainActivity extends FragmentActivity  implements OnClickListener, OnLabelPopupMenuListener {
 	private static final String TAG = "MainActivity";
 	private static final String TAG_CHANGE_DIALOG = "change_dialog";
+	private static final String TAG_CHANGE_TRAINING_DAYS = "change_training_days";
 	private static final String HISTORY_IS_UPDATED = "history_is_updated";
 	private EditText editText;
 	private Button button_add;
@@ -223,6 +229,23 @@ public class MainActivity extends FragmentActivity  implements OnClickListener, 
 	}
 	
 	// -------------------------------------------------------------------------
+	@Override
+	public void onChangeTrainingDays(long id) {
+		FragmentTransaction ft = getSupportFragmentManager().beginTransaction();
+	    Fragment prev = getSupportFragmentManager().findFragmentByTag(TAG_CHANGE_TRAINING_DAYS);
+	    if (prev != null) {
+	        ft.remove(prev);
+	    }
+	    ft.addToBackStack(null);
+	    DialogFragment dlg = TrainingDaysDialog.newInstance(id);
+	    dlg.show(ft, TAG_CHANGE_DIALOG);
+	}
+	
+	
+	
+	
+	
+	// -------------------------------------------------------------------------
 	public static class ChangeLabelDialog extends DialogFragment implements LoaderCallbacks<Cursor>, OnClickListener {
 		private static final String ID_LABEL_KEY = "id";
 		private static final int ID_LOADER_CHANGE = 10;
@@ -342,6 +365,102 @@ public class MainActivity extends FragmentActivity  implements OnClickListener, 
 		private boolean isNeedToUpdate() {
 			String editedLabel = etLabel.getText().toString();
 			return !loadedLabel.equalsIgnoreCase(editedLabel);
+		}
+		
+	}
+	
+	public static class TrainingDaysDialog extends DialogFragment implements OnCheckedChangeListener {
+		private static final String ID_LABEL_KEY = "id";
+		private static final int ID_LOADER = 20;
+		private enum WeekDays{ Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday};
+		private View mView;
+		private ArrayList<CheckBox> mListCheckbox = new ArrayList<CheckBox>();
+		private byte days;
+		
+		public TrainingDaysDialog() { };
+		
+		public static TrainingDaysDialog newInstance(long id) {
+			TrainingDaysDialog dlg = new TrainingDaysDialog();
+			Bundle args = new Bundle();
+			args.putLong(ID_LABEL_KEY, id);
+			dlg.setArguments(args);
+			return dlg;
+		}
+		
+		@Override
+		public void onCreate(Bundle savedInstanceState) {
+			super.onCreate(savedInstanceState);
+			setStyle(STYLE_NO_TITLE, 0);
+		}
+		
+		@Override
+		public View onCreateView(LayoutInflater inflater, ViewGroup container,
+				Bundle savedInstanceState) {
+			mListCheckbox.clear();
+			mView = inflater.inflate(R.layout.week_days_dialog, container, false);
+			mListCheckbox.add((CheckBox)mView.findViewById(R.id.chBxMonday));
+			mListCheckbox.add((CheckBox)mView.findViewById(R.id.chBxTuesday));
+			mListCheckbox.add((CheckBox)mView.findViewById(R.id.chBxWednesday));
+			mListCheckbox.add((CheckBox)mView.findViewById(R.id.chBxThursday));
+			mListCheckbox.add((CheckBox)mView.findViewById(R.id.chBxFriday));
+			mListCheckbox.add((CheckBox)mView.findViewById(R.id.chBxSaturday));
+			mListCheckbox.add((CheckBox)mView.findViewById(R.id.chBxSunday));
+			byte d = 6;
+			fillCheckedDays(d);
+			for (final CheckBox checkBox : mListCheckbox) {
+				checkBox.setOnCheckedChangeListener(this);
+			}
+			return mView;
+		}
+		
+		@Override
+		public void onDestroy() {
+			super.onDestroy();
+			mView = null;
+		}
+
+		@Override
+		public void onCheckedChanged(CompoundButton buttonView,
+				boolean isChecked) {
+			final int id = buttonView.getId();
+			switch(id) {
+			case R.id.chBxMonday:
+				setCheckedDays(WeekDays.Monday, isChecked);
+				break;
+			case R.id.chBxTuesday:
+				setCheckedDays(WeekDays.Tuesday, isChecked);
+				break;
+			case R.id.chBxWednesday:
+				setCheckedDays(WeekDays.Wednesday, isChecked);
+				break;
+			case R.id.chBxThursday:
+				setCheckedDays(WeekDays.Thursday, isChecked);
+				break;
+			case R.id.chBxFriday:
+				setCheckedDays(WeekDays.Friday, isChecked);
+				break;
+			case R.id.chBxSaturday:
+				setCheckedDays(WeekDays.Saturday, isChecked);
+				break;
+			case R.id.chBxSunday:
+				setCheckedDays(WeekDays.Sunday, isChecked);
+				break;
+		}
+		}
+		
+		private void setCheckedDays(WeekDays weekDays, boolean isChecked) {
+			final int pos = weekDays.ordinal();
+			if(isChecked)
+				days |= 1 << pos;
+			else
+				days &= ~(1 << pos);
+		}
+		
+		private void fillCheckedDays(byte days) {
+			for (int i = 0; i < mListCheckbox.size(); i++) {
+				boolean checked = (days & (1 << i)) == 0 ? false : true;
+				mListCheckbox.get(i).setChecked(checked);
+			}
 		}
 		
 	}

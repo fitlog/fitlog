@@ -28,6 +28,7 @@ public class ExerciseProvider extends ContentProvider
 		sProjectionMapLabels = new HashMap<String, String>();
 		sProjectionMapLabels.put(Labels._ID, Labels.TABLE_NAME +  "." + Labels._ID);
 		sProjectionMapLabels.put(Labels.NAME, Labels.TABLE_NAME +  "." + Labels.NAME);
+		sProjectionMapLabels.put(Labels.TRAINING_DAYS, Labels.TABLE_NAME +  "." + Labels.TRAINING_DAYS);
 	}
 	private static HashMap<String, String> sProjectionMapData;	
 	static {
@@ -98,6 +99,8 @@ public class ExerciseProvider extends ContentProvider
 				+ Data.TABLE_NAME + " ADD COLUMN " + Data.COUNT_APPROACH + " INTEGER DEFAULT 0";
 		private static final String ALTER_TABLE_EXERCISE_DATA_ADD_COLUMN_COUNT_TRAINING = "ALTER TABLE "
 				+ Data.TABLE_NAME + " ADD COLUMN " + Data.COUNT_TRAINING + " INTEGER DEFAULT 0";
+		private static final String ALTER_TABLE_LABELS_ADD_COLUMN_TRAINING_DAYS = "ALTER TABLE "
+				+ Labels.TABLE_NAME + " ADD COLUMN " + Labels.TRAINING_DAYS + " INTEGER DEFAULT 0";
 
 		// ------------------------------------------------------------------------
 		DataBaseHelper(Context context)
@@ -116,6 +119,7 @@ public class ExerciseProvider extends ContentProvider
 			db.execSQL(CREATE_TRIGGER_DELETE_EXERCISES);
 			db.execSQL(ALTER_TABLE_EXERCISE_DATA_ADD_COLUMN_COUNT_APPROACH);
 			db.execSQL(ALTER_TABLE_EXERCISE_DATA_ADD_COLUMN_COUNT_TRAINING);
+			db.execSQL(ALTER_TABLE_LABELS_ADD_COLUMN_TRAINING_DAYS);
 		}
 
 		// ------------------------------------------------------------------------
@@ -123,7 +127,7 @@ public class ExerciseProvider extends ContentProvider
 		public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
 			Log.d ( TAG, "inner onUpgrade called" );
 			int version = oldVersion;
-			switch( version ) {
+			switch(version) {
 			case ProviderMetaData.VER_FIRST: {
 				db.execSQL(CREATE_TRIGGER_DELETE_EXERCISES);
 				version = ProviderMetaData.VER_ADD_TRIGGER;
@@ -131,6 +135,10 @@ public class ExerciseProvider extends ContentProvider
 			case ProviderMetaData.VER_ADD_TRIGGER: {
 				updateToVer3(db);
 				version = ProviderMetaData.VER_ADD_COLUMNS_TO_DATA_TABLE;
+			}
+			case ProviderMetaData.VER_ADD_COLUMNS_TO_DATA_TABLE: {
+				db.execSQL(ALTER_TABLE_LABELS_ADD_COLUMN_TRAINING_DAYS);
+				version = ProviderMetaData.VER_ADD_COL_TRAINING_DAYS_TO_LABELS_TABLE;
 			}
 				
 			}
@@ -151,6 +159,7 @@ public class ExerciseProvider extends ContentProvider
 			fill_new_columns(db);
 		}
 		
+		// ------------------------------------------------------------------------
 		private void fill_new_columns(SQLiteDatabase db) {
 			final String [] PROJECTION = 
 					new String[] {
@@ -269,7 +278,7 @@ public class ExerciseProvider extends ContentProvider
 	public Uri insert(Uri uri, ContentValues initialValues)
 	{
 		final SQLiteDatabase db = mOpenHelper.getWritableDatabase ();
-		final int match = sUriMatcher.match ( uri );
+		final int match = sUriMatcher.match (uri);
 		long rowId = -1;
 		
 		switch(match){

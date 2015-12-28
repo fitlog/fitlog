@@ -14,8 +14,9 @@ public class ProviderMetaData
 	public static final int VER_FIRST = 1;
 	public static final int VER_ADD_TRIGGER = 2;
 	public static final int VER_ADD_COLUMNS_TO_DATA_TABLE = 3;
+	public static final int VER_ADD_COL_TRAINING_DAYS_TO_LABELS_TABLE = 4;
 	
-	public static final int CUR_DATABASE_VERSION = VER_ADD_COLUMNS_TO_DATA_TABLE;
+	public static final int CUR_DATABASE_VERSION = VER_ADD_COL_TRAINING_DAYS_TO_LABELS_TABLE;
 	public static final String DATA_JOIN_LABELS = 
 			Data.TABLE_NAME + " LEFT OUTER JOIN " 
 			+ Labels.TABLE_NAME + " ON("
@@ -27,6 +28,7 @@ public class ProviderMetaData
 	
 	interface LabelsColumns{
 		String NAME = "name";
+		String TRAINING_DAYS = "training_days";
 	}
 	interface DataColumns{
 		String WEIGHT = "weight";
